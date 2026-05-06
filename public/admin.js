@@ -1,36 +1,23 @@
 /* ========================================================================
- * Beer Distribution Game Simulator: admin.js
- * ========================================================================
- * The MIT License (MIT)
- *
- * Copyright (c) 2016-2017 Miron Vranjes. All Rights Reserved.
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
- * THE SOFTWARE.
+ * Beer Distribution Game Simulator: admin.js (中文版)
+ * 啤酒分销游戏模拟器 - 管理后台
  * ======================================================================== */
 
-var socket = io();
-var gameGroup;
+var socket = io(undefined, {
+  reconnection: true,
+  reconnectionDelay: 2000,
+  reconnectionAttempts: 99999,
+  timeout: 60000
+});
 var chart;
+
+// Expose gameGroup globally so report.html can access it
+window.gameGroup = undefined;
+var gameGroup;
 
 google.charts.load('current', { packages: ['corechart'] });
 
-// Admin page
+// 管理后台
 $(document).ready(function () {
     $('#grouppanel').hide();
     $('#myModal').modal('show');
@@ -38,7 +25,7 @@ $(document).ready(function () {
     $('#btnEndGame').hide();
     $('#charts').hide();
 
-    // Coming in from the dialog
+    // 登录对话框
     $("#btnAdmin").click(function () {
         var password = $('#formPassword').val();
         socket.emit('submit password', password, function (msg) {
@@ -46,8 +33,10 @@ $(document).ready(function () {
                 $('#wrongPassword').show();
             } else {
                 $('#myModal').modal('hide');
-                $('#groupRank').text("Group #");
+                $('#groupRank').text("团队 #");
                 gameGroup = msg.groups;
+                window.gameGroup = gameGroup;
+                try { sessionStorage.setItem('beerGameGroup', JSON.stringify(gameGroup)); } catch(e) {}
                 refreshTable(gameGroup, msg.numUsers, false);
                 $('#grouppanel').show();
 
@@ -62,22 +51,22 @@ $(document).ready(function () {
         });
     });
 
-    // Start the game button
+    // 开始游戏按钮
     $("#btnStartGame").click(function () {
         $('#gameStartError').hide();
 
         socket.emit('start game', function (msg) {
             if (msg.err) {
-                $('#errorText').text('The game could not be started. ' + msg.err);
+                $('#errorText').text('无法开始游戏。' + msg.err);
                 $('#gameStartError').show();
             } else {
-                $('#groupRank').text("Group #");
+                $('#groupRank').text("团队 #");
                 startGame(msg.numUsers);
             }
         });
     });
 
-    // Reset the game button
+    // 重置游戏按钮
     $("#btnResetGame").click(function () {
         $('#btnStartGame').show();
         $('#btnEndGame').hide();
@@ -86,46 +75,52 @@ $(document).ready(function () {
 
         socket.emit('reset game', function (msg) {
             if (msg == "Error") {
-                $('#errorText').text('The game could not be restarted.');
+                $('#errorText').text('游戏无法重新开始。');
                 $('#gameStartError').show();
             } else {
                 gameGroup = msg.groups;
-                $('#groupRank').text("Group #");
+                window.gameGroup = gameGroup;
+                try { sessionStorage.setItem('beerGameGroup', JSON.stringify(gameGroup)); } catch(e) {}
+                $('#groupRank').text("团队 #");
                 refreshTable(gameGroup, msg.numUsers, false);
             }
         });
     });
 
-    // End the game button
+    // 结束游戏按钮
     $("#btnEndGame").click(function () {
         $('#btnEndGame').hide();
 
         socket.emit('end game', function (msg) {
             if (msg == "Error") {
-                $('#errorText').text('The game could not be ended.');
+                $('#errorText').text('游戏无法结束。');
                 $('#gameStartError').show();
             } else {
                 gameGroup = msg.groups;
+                window.gameGroup = gameGroup;
+                try { sessionStorage.setItem('beerGameGroup', JSON.stringify(gameGroup)); } catch(e) {}
 
                 rankGroups(msg.numUsers);
             }
         });
     });
 
-    // Removing a group (in case there are not enough players to start)
+    // 删除团队（人数不足时）
     $(document).on('click', '.btnRemoveGroup', function () {
         socket.emit('remove group', $(this).attr("group"), function (msg) {
             if (msg == "Error") {
-                $('#errorText').text('The group could not be removed.');
+                $('#errorText').text('无法删除该团队。');
                 $('#gameStartError').show();
             } else {
                 gameGroup = msg.groups;
+                window.gameGroup = gameGroup;
+                try { sessionStorage.setItem('beerGameGroup', JSON.stringify(gameGroup)); } catch(e) {}
                 refreshTable(gameGroup, msg.numUsers, false);
             }
         });
     });
 
-    // Charting commands
+    // 图表命令
     $("#chartGroup").change(function () {
         var selectedGroup = $("#chartGroup").val();
         var selectedType = $("#chartType").val();
@@ -139,13 +134,15 @@ $(document).ready(function () {
     });
 });
 
-// Fired whenever folks join the server
+// 有人加入服务器时触发
 socket.on('update table', function (msg) {
     gameGroup = msg.groups;
+                window.gameGroup = gameGroup;
+                try { sessionStorage.setItem('beerGameGroup', JSON.stringify(gameGroup)); } catch(e) {}
     refreshTable(gameGroup, msg.numUsers, false);
 });
 
-// Fired whenever a group has finished a week
+// 某个团队完成一周时触发
 socket.on('update group', function (msg) {
     gameGroup[msg.groupNum] = msg.groupData;
 
@@ -156,26 +153,26 @@ socket.on('update group', function (msg) {
     drawChart(selectedGroup, selectedType);
 });
 
-// Changes the UI when the game starts
+// 游戏开始时改变UI
 function startGame(numUsers) {
     $('#btnStartGame').hide();
     $('#btnEndGame').show();
     $('#btnResetGame').show();
     if (numUsers == 1) {
-        var numParticipants = "1 participant.";
+        var numParticipants = "1 名参与者。";
     } else {
-        var numParticipants = numUsers + ' participants.';
+        var numParticipants = numUsers + ' 名参与者。';
     }
 
-    $('#status').text('The game has started with ' + numParticipants);
+    $('#status').text('游戏已开始，共有 ' + numParticipants);
 
     refreshTable(gameGroup, numUsers, true);
     showChart();
 }
 
-// Sorts the groups by the money they made
+// 按盈利排序团队
 function rankGroups(numUsers) {
-    $('#groupRank').text("Rank");
+    $('#groupRank').text("排名");
     var lowestWeek = gameGroup[gameGroup.length - 1].week;
     for (var i = 0; i < gameGroup.length; i++) {
         if (gameGroup[i].week < lowestWeek) lowestWeek = gameGroup[i].week;
@@ -190,9 +187,9 @@ function rankGroups(numUsers) {
     refreshTable(gameGroup, numUsers, true);
 }
 
-// Start showing the fancy charts
+// 显示图表
 function showChart() {
-    $("#chartGroup").empty(); // remove old options
+    $("#chartGroup").empty(); // 移除旧选项
 
     for (var i = 0; i < gameGroup.length; i++) {
         $("#chartGroup").append($("<option></option>").attr("value", i).text(i + 1));
@@ -205,11 +202,11 @@ function showChart() {
     drawChart(selectedGroup, selectedType);
 }
 
-// Updates the table of users (this happens in real time)
+// 实时更新用户表格
 function refreshTable(groups, numUsers, gameStarted) {
     $('#grouptable > tbody').html("");
     for (var i = 0; i < groups.length; i++) {
-        var week = gameStarted ? " (W " + groups[i].week + ", $" + parseFloat(groups[i].cost).toFixed(0) + ")" : ""
+        var week = gameStarted ? " (第 " + groups[i].week + " 周，¥" + parseFloat(groups[i].cost).toFixed(0) + ")" : ""
         $('#grouptable > tbody').append('<tr id=\'group' + i + '\'><td>' + (i + 1) + week + '</td></tr>');
         var userDisconnected = false;
         for (var j = 0; j < 4; j++) {
@@ -218,7 +215,7 @@ function refreshTable(groups, numUsers, gameStarted) {
                     var userCell = '<td>' + groups[i].users[j].name + '</td>';
                 } else {
                     userDisconnected = true;
-                    var userCell = '<td>' + groups[i].users[j].name + ' (Disconnected)</td>';
+                    var userCell = '<td>' + groups[i].users[j].name + '（已断开）</td>';
                 }
             } else {
                 var userCell = '<td></td>';
@@ -234,17 +231,19 @@ function refreshTable(groups, numUsers, gameStarted) {
     }
 
     gameGroup = groups;
+    window.gameGroup = gameGroup;
+                try { sessionStorage.setItem('beerGameGroup', JSON.stringify(gameGroup)); } catch(e) {}
 
     if (numUsers == 1) {
-        var numParticipants = "There is currently 1 participant.";
+        var numParticipants = "当前有 1 名参与者。";
     } else {
-        var numParticipants = 'There are currently ' + numUsers + ' participants.';
+        var numParticipants = '当前有 ' + numUsers + ' 名参与者。';
     }
 
-    $('#status').text('You have not started the game. ' + numParticipants);
+    $('#status').text('游戏尚未开始。' + numParticipants);
 }
 
-// The details of the fancy charts
+// 图表详情
 function drawChart(group, type) {
     if (!chart) chart = new google.visualization.LineChart(document.getElementById('groupChart'));
     var data = new google.visualization.DataTable();
@@ -263,15 +262,15 @@ function drawChart(group, type) {
             switch (type) {
                 case "Cost":
                     numToPush = gameGroup[group].users[j].costHistory[i];
-                    vAxisTitle = "Cost ($)";
+                    vAxisTitle = "成本 (¥)";
                     break;
                 case "Inventory":
                     numToPush = parseInt(gameGroup[group].users[j].inventoryHistory[i]) - parseInt(gameGroup[group].users[j].backlogHistory[i]);
-                    vAxisTitle = "Inventory (units)";
+                    vAxisTitle = "库存 (单位)";
                     break;
                 case "Orders":
                     numToPush = gameGroup[group].users[j].orderHistory[i];
-                    vAxisTitle = "Orders (units)";
+                    vAxisTitle = "订单 (单位)";
                     break;
                 default:
             }
@@ -282,23 +281,23 @@ function drawChart(group, type) {
     }
 
     var vAxisTitle = "";
-    var chartTitle = "Group " + parseInt(parseInt(group) + 1);
+    var chartTitle = "第 " + parseInt(parseInt(group) + 1) + " 组";
     switch (type) {
         case "Cost":
-            vAxisTitle = "Cost ($)";
+            vAxisTitle = "成本 (¥)";
             break;
         case "Inventory":
-            vAxisTitle = "Inventory (units)";
+            vAxisTitle = "库存 (单位)";
             break;
         case "Orders":
-            vAxisTitle = "Orders (units)";
+            vAxisTitle = "订单 (单位)";
             break;
         default:
     }
 
     var options = {
         hAxis: {
-            title: 'Week #'
+            title: '第几周'
         },
         vAxis: {
             title: vAxisTitle

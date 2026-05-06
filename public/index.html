@@ -1,47 +1,26 @@
 <!DOCTYPE html>
-<!-- Beer Distribution Game Simulator. Licensed under MIT license. Copyright (c) 2016-2017 Miron Vranjes. All Rights Reserved -->
-<html lang="en">
+<html lang="zh-CN">
 
 <head>
   <meta charset="utf-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Beer Distribution Game Simulator">
+  <meta name="description" content="啤酒分销游戏">
   <meta name="author" content="Miron Vranjes">
 
-  <title>Beer Distribution Game</title>
+  <title>啤酒分销游戏</title>
 
-  <!-- Latest compiled and minified CSS -->
-  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css" integrity="sha384-1q8mTJOASx8j1Au+a5WDVnPi2lkFfwwEAa8hDDdjZlpLegxhjVME1fgjWPGmkzs7"
-    crossorigin="anonymous">
-
-  <!-- Optional theme -->
-  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap-theme.min.css" integrity="sha384-fLW2N01lMqjakBkx3l/M9EahuwpSfeNvV63J5ezn3uZzapT0u7EYsXMjQV+0En5r"
-    crossorigin="anonymous">
-
+  <link rel="stylesheet" href="./bootstrap.min.css" crossorigin="anonymous">
+  <link rel="stylesheet" href="./bootstrap-theme.min.css" crossorigin="anonymous">
   <link rel="stylesheet" href="animate.css">
-
   <link rel="stylesheet" href="style.css">
 
-  <!-- jQuery library -->
-  <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.4/jquery.min.js"></script>
-
-  <!-- Latest compiled and minified JavaScript -->
-  <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/js/bootstrap.min.js" integrity="sha384-0mSbJDEHialfmuBBQP6A4Qrprq5OVfW37PRR3j5ELqxss1yVqOtnepnHVP9aJ7xS"
-    crossorigin="anonymous"></script>
-
-  <script src="https://cdn.socket.io/socket.io-1.2.0.js"></script>
+  <script src="./jquery.min.js"></script>
+  <script src="./bootstrap.min.js" crossorigin="anonymous"></script>
+  <script src="./socket.io-1.2.0.js"></script>
   <script src="countUp.js"></script>
   <script src="validator.js"></script>
-
-  <!-- The client source -->
   <script src="client.js"></script>
-
-  <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
-  <!--[if lt IE 9]>
-      <script src="https://oss.maxcdn.com/html5shiv/3.7.3/html5shiv.min.js"></script>
-      <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
-    <![endif]-->
 </head>
 
 <body>
@@ -51,20 +30,19 @@
       <div class="modal-content">
         <div class="modal-header">
           <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
-          <h4 class="modal-title">Welcome to <span class="weekText">Week 1</span>!</h4>
+          <h4 class="modal-title">欢迎来到第 <span class="weekText">1</span> 周！</h4>
         </div>
         <div class="modal-body">
-          <p>You are now in <span class="weekText">Week 1</span> of the game. As with every turn, here are the steps you'll
-            need to take:</p>
+          <p>您现在进入游戏第 <span class="weekText">1</span> 周。每轮的步骤如下：</p>
           <ol>
-            <li>Accept your new <strong>incoming delivery</strong> from the <span class="upstreamName">Distributor</span>.</li>
-            <li>Fulfill the new <strong>order request</strong> to the <span class="downstreamName">Customer</span>.</li>
-            <li>Place a <strong>new order</strong> with the <span class="upstreamName">Distributor</span>.</li>
+            <li>接收来自<span class="upstreamName">分销商</span>的<strong>新到货物</strong>。</li>
+            <li>满足<span class="downstreamName">客户</span>的<strong>订单请求</strong>。</li>
+            <li>向<span class="upstreamName">分销商</span>下达<strong>新订单</strong>。</li>
           </ol>
-          <p>Have fun this week!</p>
+          <p>祝您本周顺利！</p>
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-primary" data-dismiss="modal">Got it!</button>
+          <button type="button" class="btn btn-primary" data-dismiss="modal">知道了！</button>
         </div>
       </div>
     </div>
@@ -75,30 +53,28 @@
       <div class="modal-content">
         <form role="form" data-toggle="validator">
           <div class="modal-header">
-            <h4 class="modal-title">Please enter your username</h4>
+            <h4 class="modal-title">请输入您的用户名</h4>
           </div>
           <div class="modal-body">
-            <p>To get started with the Beer Distribution Game simulation, please enter a unique username. We'll randomly assign
-              you to a group.</p>
+            <p>请输入一个唯一的用户名，系统将随机分配您到一个团队。</p>
             <div class="alert alert-danger collapse" role="alert" id="errorDialog">
               <span class="glyphicon glyphicon-exclamation-sign" aria-hidden="true"></span>
-              <span class="sr-only">Error:</span> <span id="errorText">That username is already in use! Please pick a different username.</span>
+              <span class="sr-only">错误：</span> <span id="errorText">该用户名已被使用！请选择一个不同的用户名。</span>
             </div>
             <div class="form-group has-feedback">
-              <label for="formUsername" class="control-label">Username</label>
+              <label for="formUsername" class="control-label">用户名</label>
               <div class="input-group">
                 <span class="input-group-addon">
         <span class="glyphicon glyphicon-user" aria-hidden="true"></span>
                 </span>
-                <input type="text" pattern="^[_A-z0-9]{3,}$" maxlength="15" class="form-control" id="formUsername" placeholder="Username"
-                  required>
+                <input type="text" pattern="^[_A-z0-9\u4e00-\u9fa5]{2,}$" maxlength="15" class="form-control" id="formUsername" placeholder="用户名" required>
               </div>
               <span class="glyphicon form-control-feedback" aria-hidden="true"></span>
-              <div class="help-block with-errors">Minimum of 3 characters</div>
+              <div class="help-block with-errors">至少3个字符，支持中文</div>
             </div>
           </div>
           <div class="modal-footer form-group">
-            <button type="submit" class="btn btn-primary" id="btnLogin">Start</button>
+            <button type="submit" class="btn btn-primary" id="btnLogin">开始</button>
           </div>
         </form>
       </div>
@@ -107,12 +83,12 @@
 
   <div class="container">
 
-    <h2>Beer Distribution Game <small>Beta</small></h2>
+    <h2>啤酒分销游戏 <small>Beta</small></h2>
 
     <nav class="navbar navbar-default">
       <div class="container-fluid">
         <div class="navbar-header">
-          <div class="navbar-brand" id="role">Loading...</div>
+          <div class="navbar-brand" id="role">加载中...</div>
         </div>
         <div class="collapse navbar-collapse">
           <p class="navbar-text navbar-right" id="username"></p>
@@ -120,65 +96,65 @@
       </div>
     </nav>
 
-    <p id="participants">We are waiting for the game to start.</p>
+    <p id="participants">等待游戏开始...</p>
 
     <div class="alert alert-warning collapse" role="alert" id="waitingOnUsers">
       <span class="glyphicon glyphicon-exclamation-sign" aria-hidden="true"></span>
-      <span id="waitingText">Your order was submitted. We are currently waiting on others.</span>
+      <span id="waitingText">您的订单已提交。正在等待其他玩家...</span>
     </div>
 
     <div class="alert alert-warning collapse" role="alert" id="acceptDelivery">
-      <span class="glyphicon glyphicon-inbox" aria-hidden="true"></span>
-      <span id="deliveryText">You have a new delivery from the Distributor. Accept it to get started!</span>
+      <span class="glyphicon glyphicon glyphicon-inbox" aria-hidden="true"></span>
+      <span id="deliveryText">您有一个来自分销商的新货物。接受以开始！</span>
       <p class="pull-right">
-        <a class="btn btn-warning" id="btnDeliver" href="#">Accept Delivery</a>
+        <a class="btn btn-warning" id="btnDeliver" href="#">接收货物</a>
       </p>
     </div>
 
     <div class="alert alert-success collapse" role="alert" id="fulfillOrder">
       <span class="glyphicon glyphicon-road" aria-hidden="true"></span>
-      <span id="fulfillText">The Customer is waiting for their order. You'll want to fulfill as much as you can!</span>
+      <span id="fulfillText">客户正在等待他们的订单。您需要尽可能满足需求！</span>
       <p class="pull-right">
-        <a class="btn btn-success" id="btnFulfill" href="#">Fulfill Order</a>
+        <a class="btn btn-success" id="btnFulfill" href="#">完成订单</a>
       </p>
     </div>
 
     <div class="alert alert-warning collapse" role="alert" id="newOrder">
       <span class="glyphicon glyphicon-shopping-cart" aria-hidden="true"></span>
-      <span id="orderText">Time to order from the Distributor. Fill out their order form below to place an order.</span>
+      <span id="orderText">是时候向分销商订货了。填写下方订单表单来下单。</span>
     </div>
 
     <div class="panel panel-default" id="lobby">
-      <div class="panel-heading">Team Members</div>
+      <div class="panel-heading">团队成员</div>
 
       <table class="table" id="grouptable">
         <thead>
           <tr>
             <th>#</th>
-            <th>Username</th>
-            <th>Role</th>
+            <th>用户名</th>
+            <th>角色</th>
           </tr>
         </thead>
 
         <tbody>
           <tr>
             <td>1</td>
-            <td>Waiting...</td>
+            <td>等待中...</td>
             <td></td>
           </tr>
           <tr>
             <td>2</td>
-            <td>Waiting...</td>
+            <td>等待中...</td>
             <td></td>
           </tr>
           <tr>
             <td>3</td>
-            <td>Waiting...</td>
+            <td>等待中...</td>
             <td></td>
           </tr>
           <tr>
             <td>4</td>
-            <td>Waiting...</td>
+            <td>等待中...</td>
             <td></td>
           </tr>
         </tbody>
@@ -189,17 +165,17 @@
       <div class="col-sm-3">
         <div class="panel panel-success">
           <div class="panel-heading">
-            <h3 class="panel-title" id="downstreamRole">Customer</h3>
+            <h3 class="panel-title" id="downstreamRole">客户</h3>
           </div>
           <div class="panel-body">
             <div class="row">
               <div class="col-xs-6">
-                <p><strong>Incoming<br/>Order:</strong></p>
-                <p class="unit-amount" id="downstreamOrders"><span id="dsOrdrAmt">0</span><small>units</small></p>
+                <p><strong>收到订单：</strong></p>
+                <p class="unit-amount" id="downstreamOrders"><span id="dsOrdrAmt">0</span><small>单位</small></p>
               </div>
               <div class="col-xs-6">
-                <p><strong>Outgoing<br/>Delivery:</strong></p>
-                <p class="unit-amount" id="downstreamShipments"><span id="dsShpAmt">0</span><small>units</small></p>
+                <p><strong>发出货物：</strong></p>
+                <p class="unit-amount" id="downstreamShipments"><span id="dsShpAmt">0</span><small>单位</small></p>
               </div>
             </div>
           </div>
@@ -208,21 +184,21 @@
       <div class="col-sm-6">
         <div class="panel panel-primary">
           <div class="panel-heading">
-            <h3 class="panel-title" id="userRole">Retailer (You)</h3>
+            <h3 class="panel-title" id="userRole">零售商（您）</h3>
           </div>
           <div class="panel-body">
             <div class="row">
               <div class="col-xs-4">
-                <p><strong>Cost:</strong></p>
-                <p class="unit-amount-sm" id="curCost">$<span id="cstAmt">0.00</span></p>
+                <p><strong>成本：</strong></p>
+                <p class="unit-amount-sm" id="curCost">¥<span id="cstAmt">0.00</span></p>
               </div>
               <div class="col-xs-4">
-                <p><strong>Inventory:</strong></p>
-                <p class="unit-amount" id="curInventory"><span id="inventoryAmt">0</span><small>units</small></p>
+                <p><strong>库存：</strong></p>
+                <p class="unit-amount" id="curInventory"><span id="inventoryAmt">0</span><small>单位</small></p>
               </div>
               <div class="col-xs-4">
-                <p><strong>Backlog:</strong></p>
-                <p class="unit-amount" id="curBacklog"><span id="bklgAmt">0</span><small>units</small></p>
+                <p><strong>积压：</strong></p>
+                <p class="unit-amount" id="curBacklog"><span id="bklgAmt">0</span><small>单位</small></p>
               </div>
             </div>
           </div>
@@ -231,23 +207,71 @@
       <div class="col-sm-3">
         <div class="panel panel-warning">
           <div class="panel-heading">
-            <h3 class="panel-title" id="upstreamRole">Distributor</h3>
+            <h3 class="panel-title" id="upstreamRole">分销商</h3>
           </div>
           <div class="panel-body">
-            <p><strong>Incoming Delivery:</strong></p>
-            <p class="unit-amount" id="upstreamShipments"><span id="usShpAmt">0</span><small>units</small></p>
+            <p><strong>收到货物：</strong></p>
+            <p class="unit-amount" id="upstreamShipments"><span id="usShpAmt">0</span><small>单位</small></p>
             <form data-toggle="validator" role="form">
               <div class="form-group">
                 <div class="input-group">
-                  <input type="text" pattern="^[0-9]+$" data-error="Invalid unit quanity" class="form-control" id="formOrderAmount" placeholder="Quantity"
-                    required>
+                  <input type="text" pattern="^[0-9]+$" data-error="请输入有效数量" class="form-control" id="formOrderAmount" placeholder="数量" required>
                   <span class="input-group-btn">
-                  <button class="btn btn-warning" type="submit" id="btnOrder">Order</button>
+                  <button class="btn btn-warning" type="submit" id="btnOrder">下单</button>
                 </span>
                 </div>
                 <div class="help-block with-errors"></div>
               </div>
             </form>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 实时数据分析面板 -->
+    <div class="row" id="analyticsPanel" style="display:none;">
+      <div class="col-sm-12">
+        <div class="panel panel-info">
+          <div class="panel-heading">
+            <h3 class="panel-title">📊 实时数据分析</h3>
+          </div>
+          <div class="panel-body">
+            <div class="row">
+              <!-- 成本趋势 -->
+              <div class="col-sm-6">
+                <p><strong>💰 成本趋势（每轮）</strong></p>
+                <div id="costChart" style="height:80px;display:flex;align-items:flex-end;gap:3px;padding:5px;background:#f8f9fa;border-radius:4px;"></div>
+              </div>
+              <!-- 订单历史 -->
+              <div class="col-sm-6">
+                <p><strong>📦 我的订单历史</strong></p>
+                <div id="orderHistory" style="height:80px;display:flex;align-items:flex-end;gap:3px;padding:5px;background:#f8f9fa;border-radius:4px;overflow-x:auto;"></div>
+              </div>
+            </div>
+            <div class="row" style="margin-top:10px;">
+              <!-- 游戏进度 -->
+              <div class="col-sm-4">
+                <p><strong>📅 游戏进度</strong></p>
+                <div class="progress" style="margin-bottom:0;">
+                  <div class="progress-bar progress-bar-info" id="weekProgress" style="width:0%"></div>
+                </div>
+                <small>第 <span id="currentWeek">0</span> / 26 周</small>
+              </div>
+              <!-- 牛鞭效应指示 -->
+              <div class="col-sm-4">
+                <p><strong>🐂 牛鞭效应</strong></p>
+                <div id="bullwhipIndicator" style="font-size:14px;">
+                  <span class="label label-success">稳定</span>
+                </div>
+              </div>
+              <!-- 供应链状态 -->
+              <div class="col-sm-4">
+                <p><strong>🔗 供应链状态</strong></p>
+                <div id="supplyChainStatus" style="font-size:12px;">
+                  <span class="label label-default">等待中</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>

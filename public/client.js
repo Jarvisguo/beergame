@@ -1,30 +1,14 @@
 /* ========================================================================
- * Beer Distribution Game Simulator: client.js
- * ========================================================================
- * The MIT License (MIT)
- *
- * Copyright (c) 2016-2017 Miron Vranjes. All Rights Reserved.
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
- * THE SOFTWARE.
+ * Beer Distribution Game Simulator: client.js (中文版)
+ * 啤酒分销游戏模拟器
  * ======================================================================== */
 
-var socket = io();
+var socket = io(undefined, {
+  reconnection: true,
+  reconnectionDelay: 2000,
+  reconnectionAttempts: 99999,
+  timeout: 60000
+});
 
 var curWeek = 0;
 var curUser = null;
@@ -43,12 +27,12 @@ var countOptions = {
     suffix: ''
 };
 
-// Login
+// 登录
 $(document).ready(function () {
     $('#board').hide();
     $('#myModal').modal('show');
 
-    // Dialog for logging in
+    // 登录对话框
     $("#btnLogin").click(function (event) {
         event.preventDefault();
         if ($(this).hasClass("disabled")) return;
@@ -56,10 +40,10 @@ $(document).ready(function () {
         socket.emit('submit username', username, function (msg) {
             console.log(msg);
             if (msg == "Invalid Username") {
-                $('#errorText').text('That username is already in use! Please pick a different username.');
+                $('#errorText').text('该用户名已被使用！请选择一个不同的用户名。');
                 $('#errorDialog').show();
             } else if (msg == "Game Started") {
-                $('#errorText').text('This game has already begun, no new users can be added.');
+                $('#errorText').text('游戏已开始，无法加入新用户。');
                 $('#errorDialog').show();
             } else {
                 userIdx = msg.idx;
@@ -72,17 +56,32 @@ $(document).ready(function () {
                 $('#formUsername').val('');
                 $('#errorDialog').hide();
                 $('#myModal').modal('hide');
-                $('#role').text('Your Role: ' + curUser.role.name);
-                $('#username').text('Signed in as ' + curUser.name);
+                $('#role').text('您的角色：' + curUser.role.name);
+                $('#username').text('已登录：' + curUser.name);
 
                 if (curWeek > 0 && !gameEnded) {
                     nextTurn(numUsers, curWeek, curUser);
-                    if (curGroup.waitingForOrders.length > 0) {
+                    // 加入游戏时：如果自己已不在等待列表中，说明本轮已提交
+                    if (curGroup.waitingForOrders.indexOf(curUser.role.name) < 0) {
                         submittedOrder = true;
                         $("#formOrderAmount").val(curUser.role.upstream.orders);
                         $("#btnOrder").attr("disabled", true);
                         $("#formOrderAmount").attr("disabled", true);
-                        updateWait();
+                        updateWait(curGroup.waitingForOrders);
+                    } else if (curWeek >= 50) {
+                        // 50周后不允许下单
+                        submittedOrder = true;
+                        $("#formOrderAmount").val('已结束');
+                        $("#btnOrder").attr("disabled", true);
+                        $("#formOrderAmount").attr("disabled", true);
+                        $('#waitingOnUsers').html('<span class="label label-danger">⛔ 游戏已达50周上限，停止运营</span>').fadeIn('fast');
+                    } else {
+                        // 自己的角色还在等待列表中，可以提交
+                        submittedOrder = false;
+                        $('#newOrder').fadeIn('fast');
+                        $("#btnOrder").attr("disabled", false);
+                        $("#formOrderAmount").attr("disabled", false);
+                        $('#waitingOnUsers').fadeOut('fast');
                     }
                     $('#board').show();
                     $('#lobby').hide();
@@ -97,10 +96,11 @@ $(document).ready(function () {
         });
     });
 
-    // Submitting an order
-    $("#btnOrder").click(function () {
-        event.preventDefault();
-        if ($(this).hasClass("disabled")) return;
+    // 提交订单
+    $("#btnOrder").click(function (e) {
+        e.preventDefault();
+        // 只检查HTML disabled属性，不检查CSS class（class可能滞后）
+        if (this.disabled) return;
         var orderAmount = $('#formOrderAmount').val();
 
         var curCost = parseInt($('#cstAmt').text());
@@ -112,11 +112,15 @@ $(document).ready(function () {
             $('#newOrder').fadeOut("fast");
             $("#btnOrder").attr("disabled", true);
             $("#formOrderAmount").attr("disabled", true);
+            // 立即更新本地的 waitingForOrders
+            if (msg && curGroup) {
+                curGroup.waitingForOrders = msg;
+            }
             updateWait(msg);
         });
     });
 
-    // Accepting a delivery
+    // 接收货物
     $("#btnDeliver").click(function () {
         $('#acceptDelivery').fadeOut("fast");
         $('#upstreamShipments').addClass('animated bounceInRight');
@@ -130,14 +134,14 @@ $(document).ready(function () {
                 var shipmentCount = new CountUp("usShpAmt", curUser.role.upstream.shipments, 0, 0, 2, countOptions);
                 shipmentCount.start();
                 inventoryCount.start(function () {
-                    $('#fulfillText').text("The " + curUser.role.downstream.name + " is waiting for their order. You'll want to fulfill as much as you can!");
+                    $('#fulfillText').text(curUser.role.downstream.name + ' 正在等待他们的订单。您需要尽可能满足需求！');
                     $('#fulfillOrder').fadeIn("fast");
                 });
             });
         });
     });
 
-    // Fulfilling an order
+    // 完成订单
     $("#btnFulfill").click(function () {
         $('#fulfillOrder').fadeOut("fast");
         $('#downstreamOrders').addClass('animated bounceInLeft');
@@ -168,9 +172,9 @@ $(document).ready(function () {
                             $('#downstreamShipments').removeClass('animated bounceOutLeft');
 
                             if (curUser.role.name == "National/Donor") {
-                                $('#orderText').text("Time to place an order for the production line. Fill out the order form below to place an order.");
+                                $('#orderText').text('是时候向生产线下单了。填写下方订单表单来下单。');
                             } else {
-                                $('#orderText').text("Time to order from the " + curUser.role.upstream.name + ". Fill out their order form below to place an order.");
+                                $('#orderText').text('是时候向 ' + curUser.role.upstream.name + ' 订货了。填写下方订单表单来下单。');
                             }
 
                             $('#newOrder').fadeIn("fast");
@@ -183,7 +187,7 @@ $(document).ready(function () {
         });
     });
 
-    // Go to the next turn
+    // 进入下一轮
     $('#nextTurn').on('hidden.bs.modal', function (e) {
         if (curWeek != 0 && !gameEnded) {
             $('#formOrderAmount').val('');
@@ -194,11 +198,10 @@ $(document).ready(function () {
             var orderCount = new CountUp("dsOrdrAmt", 0, curUser.role.downstream.orders, 0, 3, countOptions);
             orderCount.start();
 
-            // This is a bit hacky because it depends on how you call the roles :(
             if (curUser.role.name == "Factory") {
-                $('#deliveryText').text("You have a new delivery from the production line. Accept it to get started!");
+                $('#deliveryText').text('生产线有新货物到达。接受以开始！');
             } else {
-                $('#deliveryText').text("You have a new delivery from the " + curUser.role.upstream.name + ". Accept it to get started!");
+                $('#deliveryText').text('您有一个来自 ' + curUser.role.upstream.name + ' 的新货物。接受以开始！');
             }
 
             $('#acceptDelivery').fadeIn("fast");
@@ -206,24 +209,24 @@ $(document).ready(function () {
     });
 });
 
-// Update the # of users in real time
+// 实时更新用户数
 socket.on('user joined', function (msg) {
     numUsers = msg.numUsers;
     updateStatus();
 });
 
-// Update the # of users in real time
+// 实时更新用户数
 socket.on('user left', function (msg) {
     numUsers = msg.numUsers;
     updateStatus();
 });
 
-// Kicked out of the group
+// 被踢出组
 socket.on('change group subscription', function (msg) {
     socket.emit('change group', msg);
 });
 
-// You were kicked out by the admin
+// 被管理员踢出
 socket.on('kicked out', function (msg) {
     socket.emit('ack getting kicked');
 
@@ -234,12 +237,12 @@ socket.on('kicked out', function (msg) {
     $('#myModal').modal('show');
 });
 
-// Someone joined your specific group
+// 有人加入您的组
 socket.on('group member joined', function (msg) {
     curGroup.users[msg.idx] = msg.update;
     $('#grouptable > tbody > tr').each(function (i) {
         if (msg.idx == i) {
-            $(this).html('<td>' + (i + 1) + '</td><td>' + (msg.idx == userIdx ? curGroup.users[i].name : 'Player ' + (i + 1)) + '</td><td>' + msg.update.role.name + '</td>');
+            $(this).html('<td>' + (i + 1) + '</td><td>' + (msg.idx == userIdx ? curGroup.users[i].name : '玩家 ' + (i + 1)) + '</td><td>' + msg.update.role.name + '</td>');
 
             if (msg.update.socketId) {
                 $(this).removeClass("danger");
@@ -248,46 +251,46 @@ socket.on('group member joined', function (msg) {
     });
 });
 
-// Someone left your specific group
+// 有人离开了您的组
 socket.on('group member left', function (msg) {
     $('#grouptable > tbody > tr').each(function (i) {
         if (msg.idx == i && !msg.update.socketId && msg.idx != userIdx) {
-            $(this).html('<td>' + (i + 1) + '</td><td>Player ' + (i + 1) + ' (Disconnected)</td><td>' + msg.update.role.name + '</td>');
+            $(this).html('<td>' + (i + 1) + '</td><td>玩家 ' + (i + 1) + '（已断开）</td><td>' + msg.update.role.name + '</td>');
             $(this).addClass("danger");
         }
     });
 });
 
-// Since this is real time, we must wait on others before advancing to the next week
+// 等待其他人提交订单后才能进入下一周
 function updateWait(msg) {
     if (msg && submittedOrder) {
         var listOfUsers = "";
         for (var i = 0; i < msg.length; i++) {
-            if (i != 0 && i != msg.length - 1 && msg.length > 1) listOfUsers += ", ";
-            if (i == msg.length - 1 && msg.length > 1) listOfUsers += " and ";
+            if (i != 0 && i != msg.length - 1 && msg.length > 1) listOfUsers += "、";
+            if (i == msg.length - 1 && msg.length > 1) listOfUsers += " 和 ";
             listOfUsers += msg[i];
         }
 
-        $('#waitingText').text("Your order was submitted. We are currently waiting on " + listOfUsers + " to submit an order.");
+        $('#waitingText').text('您的订单已提交。正在等待 ' + listOfUsers + ' 提交订单。');
         $('#waitingOnUsers').fadeIn("fast");
     } else {
         $('#waitingOnUsers').fadeOut("fast");
     }
 }
 
-// Updates the table in real time
+// 实时更新表格
 function updateTable(showNames) {
     $('#grouptable > tbody > tr').each(function (i) {
         if (curGroup.users[i] && i != userIdx) {
             if (curGroup.users[i].socketId) {
                 $(this).removeClass("danger");
-                $(this).html('<td>' + (i + 1) + '</td><td>' + (showNames ? curGroup.users[i].name : 'Player ' + (i + 1)) + '</td><td>' + curGroup.users[i].role.name + '</td>');
+                $(this).html('<td>' + (i + 1) + '</td><td>' + (showNames ? curGroup.users[i].name : '玩家 ' + (i + 1)) + '</td><td>' + curGroup.users[i].role.name + '</td>');
             } else {
                 if (curGroup.users[i].role.name) {
-                    $(this).html('<td>' + (i + 1) + '</td><td>' + (showNames ? curGroup.users[i].name : 'Player ' + (i + 1)) + ' (Disconnected)</td><td>' + curGroup.users[i].role.name + '</td>');
+                    $(this).html('<td>' + (i + 1) + '</td><td>' + (showNames ? curGroup.users[i].name : '玩家 ' + (i + 1)) + '（已断开）</td><td>' + curGroup.users[i].role.name + '</td>');
                     $(this).addClass("danger");
                 } else {
-                    $(this).html('<td>' + (i + 1) + '</td><td>Waiting...</td><td>' + curGroup.users[i].role.name + '</td>');
+                    $(this).html('<td>' + (i + 1) + '</td><td>等待中...</td><td>' + curGroup.users[i].role.name + '</td>');
                     $(this).removeClass("danger");
                 }
             }
@@ -300,7 +303,7 @@ function updateTable(showNames) {
     });
 }
 
-// Reset everything about the user in case the game is reset
+// 重置用户状态（游戏重置时使用）
 function resetUser() {
     curWeek = 0;
     curUser = null;
@@ -312,60 +315,129 @@ function resetUser() {
 
     $('#grouptable > tbody > tr').each(function (i) {
         $(this).removeClass("danger");
-        $(this).html('<td>' + (i + 1) + '</td><td>Waiting...</td><td></td>');
+        $(this).html('<td>' + (i + 1) + '</td><td>等待中...</td><td></td>');
     });
 }
 
-// Updates the status message to reflect the state of the game
+// 更新状态消息
 function updateStatus() {
     if (numUsers == 1) {
-        var numParticipants = "There is currently 1 participant.";
+        var numParticipants = "当前有 1 名参与者。";
     } else {
-        var numParticipants = 'There are currently ' + numUsers + ' participants.';
+        var numParticipants = '当前有 ' + numUsers + ' 名参与者。';
     }
 
     if (curWeek > 0 && !gameEnded) {
-        $('#participants').text('The game has started. You are in Week ' + curWeek + ". " + numParticipants);
+        $('#participants').text('游戏已开始。您在第 ' + curWeek + ' 周。' + numParticipants);
     } else if (!gameEnded) {
-        $('#participants').text('We are waiting for the game to start. ' + numParticipants);
+        $('#participants').text('等待游戏开始。' + numParticipants);
     } else {
-        $('#participants').text('The game has ended. You finished in  Week ' + curWeek + ". " + numParticipants);
+        $('#participants').text('游戏已结束。您完成于第 ' + curWeek + ' 周。' + numParticipants);
     }
 }
 
-// Next turn (week) logic
+// 下一轮（第几周）逻辑
 function nextTurn(users, week, user) {
     curUser = user;
     numUsers = users;
     curWeek = week;
 
     updateStatus();
+    updateAnalytics();  // 更新实时数据分析面板
 
     $('#downstreamRole').text(curUser.role.downstream.name);
     $('#upstreamRole').text(curUser.role.upstream.name);
-    $('#userRole').text(curUser.role.name + " (You)");
+    $('#userRole').text(curUser.role.name + '（您）');
 
     $('#dsShpAmt').text('0');
 
-    if (curWeek > 0) {
-        $('#cstAmt').text(parseFloat(curUser.costHistory[curWeek - 1]).toFixed(0));
-        $('#inventoryAmt').text(curUser.inventoryHistory[curWeek - 1]);
-        $('#bklgAmt').text(curUser.backlogHistory[curWeek - 1]);
-    } else {
-        $('#cstAmt').text('0');
-    }
-
-    $("#btnOrder").attr("disabled", true);
-    $("#formOrderAmount").attr("disabled", true);
-
-    $("span.weekText").text("Week " + week);
+    // nextTurn 更新页面数据（不再弹窗）
+    $("span.weekText").text("第 " + week + " 周");
     $("span.upstreamName").text(curUser.role.upstream.name);
     $("span.downstreamName").text(curUser.role.downstream.name);
-
-    $('#nextTurn').modal('show');
 }
 
-// The game board disappears when the game is over
+// 更新实时数据分析面板
+function updateAnalytics() {
+    // 显示分析面板
+    $('#analyticsPanel').show();
+    
+    // 更新周数
+    $('#currentWeek').text(curWeek || 0);
+    
+    // 更新进度条
+    var progress = Math.min(100, ((curWeek || 0) / 26) * 100);
+    $('#weekProgress').css('width', progress + '%');
+    
+    // 更新成本图表
+    if (curUser && curUser.costHistory) {
+        var costHtml = '';
+        var maxCost = Math.max.apply(null, curUser.costHistory) || 100;
+        curUser.costHistory.forEach(function(c, i) {
+            var height = (c / maxCost) * 100;
+            var color = i < 8 ? '#4a90d9' : (i < 19 ? '#5ba0e0' : (i < 26 ? '#6bb0e7' : '#7cc0ee'));
+            costHtml += '<div style="flex:1;height:' + height + '%;background:' + color + ';min-height:2px;border-radius:2px 2px 0 0;" title="第' + (i+1) + '周: ¥' + c.toFixed(0) + '"></div>';
+        });
+        $('#costChart').html(costHtml);
+    }
+    
+    // 更新订单历史
+    if (curUser && curUser.orderHistory) {
+        var orderHtml = '';
+        var maxOrder = Math.max.apply(null, curUser.orderHistory) || 20;
+        curUser.orderHistory.forEach(function(o, i) {
+            var height = (o / maxOrder) * 100;
+            var color = o <= 12 ? '#2a9d8f' : (o <= 16 ? '#e9c46a' : '#e76f51');
+            orderHtml += '<div style="flex:1;height:' + height + '%;background:' + color + ';min-height:2px;border-radius:2px 2px 0 0;" title="第' + (i+1) + '周: ' + o + '箱"></div>';
+        });
+        $('#orderHistory').html(orderHtml);
+    }
+    
+    // 牛鞭效应指示
+    if (curUser) {
+        var orders = curUser.orderHistory || [];
+        if (orders.length < 2) {
+            $('#bullwhipIndicator').html('<span class="label label-default">数据不足</span>');
+        } else {
+            var mean = orders.reduce(function(a, b) { return a + b; }, 0) / orders.length;
+            var variance = orders.reduce(function(a, b) { return a + Math.pow(b - mean, 2); }, 0) / orders.length;
+            var stdDev = Math.sqrt(variance);
+            var cv = mean > 0 ? stdDev / mean : 0;
+            
+            if (cv < 0.1) {
+                $('#bullwhipIndicator').html('<span class="label label-success">🟢 稳定 (CV:' + (cv*100).toFixed(0) + '%)</span>');
+            } else if (cv < 0.3) {
+                $('#bullwhipIndicator').html('<span class="label label-warning">🟡 波动 (CV:' + (cv*100).toFixed(0) + '%)</span>');
+            } else {
+                $('#bullwhipIndicator').html('<span class="label label-danger">🔴 剧烈 (CV:' + (cv*100).toFixed(0) + '%)</span>');
+            }
+        }
+    }
+    
+    // 供应链状态
+    if (curUser) {
+        var status = '';
+        if (curWeek >= 50) {
+            status = '<span class="label label-danger">⛔ 已达50周上限</span>';
+        } else if (curUser.backlog > 20) {
+            status = '<span class="label label-danger">⚠️ 严重积压(' + curUser.backlog + ')</span>';
+        } else if (curUser.backlog > 5) {
+            status = '<span class="label label-warning">⚡ 有积压(' + curUser.backlog + ')</span>';
+        } else if (curUser.inventory > 30) {
+            status = '<span class="label label-info">📦 高库存(' + curUser.inventory + ')</span>';
+        } else {
+            status = '<span class="label label-success">✅ 正常</span>';
+        }
+        $('#supplyChainStatus').html(status);
+    }
+    
+    // 50周警告
+    if (curWeek >= 45 && !$('#weekProgress').parent().find('.week-warning').length) {
+        $('#weekProgress').parent().append('<small class="week-warning" style="color:#e63946;margin-left:10px;">⚠️ 即将到达50周上限！</small>');
+    }
+}
+
+// 游戏结束时游戏板消失
 function hideGameBoard() {
     $('#board').hide();
     $('#nextTurn').modal('hide');
@@ -376,16 +448,33 @@ function hideGameBoard() {
     $('#newOrder').hide();
 }
 
-// React to the game starting (setup the UI)
+// 游戏开始时的UI设置
 socket.on('game started', function (msg) {
-    nextTurn(msg.numUsers, msg.week, curUser);
-    gameEnded = false;
-
+    // 更新本地的 waitingForOrders（服务器发来的）
+    if (msg.waitingForOrders && curGroup) {
+        curGroup.waitingForOrders = msg.waitingForOrders;
+    }
+    // 游戏开始时：玩家需要下第1周订单，直接显示表单不弹窗
+    if (curUser && msg.waitingForOrders && msg.waitingForOrders.indexOf(curUser.role.name) < 0) {
+        submittedOrder = true;
+    } else {
+        submittedOrder = false;
+    }
+    // 直接显示订单表单，不弹窗（第1周无需显示上轮结果）
+    curUser = msg.update || curUser;
+    curWeek = msg.week;
+    numUsers = msg.numUsers;
+    updateStatus();
     $('#board').show();
     $('#lobby').hide();
+    $('#newOrder').fadeIn('fast');
+    $("#btnOrder").attr("disabled", false);
+    $("#formOrderAmount").attr("disabled", false);
+    $("span.weekText").text("第 " + msg.week + " 周");
+    gameEnded = false;
 });
 
-// React to the game ending (go to lobby)
+// 游戏重置（回到大厅）
 socket.on('game reset', function (msg) {
     gameEnded = false;
     $('#lobby').show();
@@ -398,7 +487,7 @@ socket.on('game reset', function (msg) {
     updateStatus();
 });
 
-// React to the game ending (go to lobby)
+// 游戏结束（回到大厅）
 socket.on('game ended', function (msg) {
     gameEnded = true;
     $('#lobby').show();
@@ -409,17 +498,32 @@ socket.on('game ended', function (msg) {
     updateTable(true);
 });
 
-// Got a message that someone in the group sent an order
+// 收到组内某人提交订单的消息
 socket.on('update order wait', function (msg) {
     updateWait(msg);
 });
 
-// Go to the next turn
 socket.on('next turn', function (msg) {
-    console.log(msg);
-
     $('#waitingOnUsers').fadeOut("fast");
-    submittedOrder = false;
-
+    if (msg.waitingForOrders && curGroup) {
+        curGroup.waitingForOrders = msg.waitingForOrders;
+    }
+    var myRoleWaiting = curUser && msg.waitingForOrders && msg.waitingForOrders.indexOf(curUser.role.name) >= 0;
+    submittedOrder = !myRoleWaiting;
+    if (!submittedOrder) {
+        $('#newOrder').fadeIn('fast');
+        $("#btnOrder").attr("disabled", false);
+        $("#formOrderAmount").attr("disabled", false);
+    } else {
+        $('#newOrder').fadeOut('fast');
+        $("#btnOrder").attr("disabled", true);
+        $("#formOrderAmount").attr("disabled", true);
+        $('#waitingOnUsers').fadeIn('fast');
+    }
     nextTurn(msg.numUsers, msg.week, msg.update);
+});
+
+// 收到组已满（可以开始）通知
+socket.on('group ready', function (msg) {
+    $('#role').text('您的角色：' + curUser.role.name + ' - 组已满，准备开始！');
 });

@@ -27,7 +27,11 @@
 var express = require('express');
 var app = express();
 var http = require('http').Server(app);
-var io = require('socket.io')(http);
+var io = require('socket.io')(http, {
+  pingTimeout: 120000,
+  pingInterval: 30000,
+  perMessageDeflate: true
+});
 
 var groups = [];
 var users = {};
@@ -44,7 +48,7 @@ var starting_throughput = 4;
 var customer_demand = [4, 8, 12, 16, 20];
 
 // This controls how the roles are labeled
-var BEER_NAMES = ["Retailer", "Wholesaler", "Regional Warehouse", "Factory"];
+var BEER_NAMES = ["零售商", "批发商", "区域仓库", "工厂"];
 
 // This is what stores all the role data during the game
 var ROLE_0 = {
@@ -55,7 +59,7 @@ var ROLE_0 = {
         "shipments": starting_throughput
     },
     "downstream": {
-        "name": "Customer",
+        "name": "客户",
         "orders": starting_throughput,
         "shipments": starting_throughput
     }
@@ -89,7 +93,7 @@ var ROLE_2 = {
 var ROLE_3 = {
     "name": BEER_NAMES[3],
     "upstream": {
-        "name": "Factory",
+        "name": "工厂",
         "orders": starting_throughput,
         "shipments": starting_throughput
     },
@@ -110,7 +114,7 @@ app.use(express.static(__dirname + '/public'));
 io.on('connection', function (socket) {
     var addedUser = false;
 
-    // Register the user (can only happen when a game is not in progress)
+    // Register the user (allows joining even during game if there are empty slots)
     // If a user leaves by accident, try to put them back in their group (if they give the same username)
     socket.on('submit username', function (msg, callback) {
         if (addedUser) return;
@@ -133,10 +137,24 @@ io.on('connection', function (socket) {
             });
             io.to("admins").emit('update table', { numUsers: numUsers, groups: groups });
         } else {
-            if (gameStarted || gameEnded) {
-                callback("Game Started");
+            if (gameEnded) {
+                callback("Game Ended");
             } else {
-                callback("Invalid Username");
+                // Check if all groups are full and game has started
+                var allFull = true;
+                for (var i = 0; i < groups.length; i++) {
+                    if (groups[i].users.length < 4) {
+                        allFull = false;
+                        break;
+                    }
+                }
+                if (gameStarted && allFull) {
+                    callback("Game Started - All groups are full");
+                } else if (gameStarted) {
+                    callback("Game Started");
+                } else {
+                    callback("Invalid Username");
+                }
             }
         }
     });
@@ -231,26 +249,58 @@ io.on('connection', function (socket) {
 
     // Admin has started the game
     socket.on('start game', function (callback) {
-        var canStart = true;
-        var gameEnded = false;
         if (gameStarted) {
             return callback({ err: "The game has already begun." });
         } else {
+            // 统计实际在线用户数
+            var onlineCount = 0;
+            for (var si = 0; si < groups.length; si++) {
+                for (var ui = 0; ui < groups[si].users.length; ui++) {
+                    if (groups[si].users[ui].socketId) onlineCount++;
+                }
+            }
+            console.log('start game: onlineCount=' + onlineCount + ', groups[0].users.length=' + (groups[0] ? groups[0].users.length : 0));
             if (numUsers == 0) {
                 return callback({ err: "You need at least 4 people to play the game." });
-            } else if (numUsers % 4 != 0) {
-                return callback({ err: "You need to fill each group before you can start the game." });
+            } else if (onlineCount < 4) {
+                return callback({ err: "Not enough online players: " + onlineCount });
             }
 
             gameStarted = true;
             callback({ numUsers: numUsers });
 
+            // 只初始化缓冲区和状态，不处理回合（回合由 submit order 触发）
             for (var i = 0; i < groups.length; i++) {
+                var g = groups[i];
+                // 清理旧用户（socketId 为空的已断开用户），只保留当前在线用户
+                var oldLen = g.users.length;
+                g.users = g.users.filter(function(u) { return u.socketId; });
+
+                g.waitingForOrders = JSON.parse(JSON.stringify(BEER_NAMES));
+                g.shipping = [];
+                g.mailing = [];
+                g.costHistory = [];
+                for (var j = 0; j < 3; j++) {
+                    g.shipping.push([starting_throughput, starting_throughput]);
+                    g.mailing.push([starting_throughput]);
+                }
+                g.shipping.push([starting_throughput, starting_throughput]);
+
+                for (var j = 0; j < g.users.length; j++) {
+                    g.users[j].inventoryHistory = [];
+                    g.users[j].backlogHistory = [];
+                    g.users[j].costHistory = [];
+                    g.users[j].orderHistory = [];
+                }
+
+                g.week = 1;  // 游戏从第1周开始
+
+                // 发给玩家：告知游戏开始，进入第1周等待下单
                 io.to(i).emit('game started', {
                     numUsers: numUsers,
-                    week: 0
+                    week: 1,  // 直接从第1周开始（初始化已完成）
+                    waitingForOrders: g.waitingForOrders
                 });
-                advanceTurn(i);
             }
         }
     });
@@ -289,7 +339,21 @@ io.on('connection', function (socket) {
     // You've got an order from someone in a group
     socket.on('submit order', function (order, callback) {
         var user = users[socket.name];
+        if (!user || user.group === undefined) {
+            console.log("submit order ignored: user not registered or no group");
+            return callback({ err: "User not registered in a group" });
+        }
         var group = groups[user.group];
+        if (!group) {
+            console.log("submit order ignored: group not found");
+            return callback({ err: "Group not found" });
+        }
+        
+        // Check if game has exceeded 50 weeks (no more orders accepted)
+        if (group.week >= 50) {
+            console.log("submit order ignored: game week " + group.week + " >= 50");
+            return callback({ err: "Game has exceeded 50 weeks. No more orders accepted." });
+        }
 
         console.log("User: " + socket.name);
         console.log("Group: " + user.group);
@@ -297,8 +361,6 @@ io.on('connection', function (socket) {
 
         // Push the order
         group.users[user.index].role.upstream.orders = parseInt(order);
-
-        console.log("Remaining: " + group.waitingForOrders);
 
         // Reduce the list of outstanding orders
         var search_term = group.users[user.index].role.name;
@@ -326,6 +388,11 @@ http.listen(process.env.PORT || 3000, function () {
 // This is where all the turn calculation happens... dragons live here
 function advanceTurn(group) {
     var groupToAdvance = groups[group];
+
+    // Guard: only advance if group has exactly 4 players and all are ready
+    if (groupToAdvance.users.length != 4) {
+        return;
+    }
 
     // Initial turn, fill out the buffers
     if (groupToAdvance.week == 0) {
@@ -445,7 +512,8 @@ function advanceTurn(group) {
         io.to(groupToAdvance.users[i].socketId).emit('next turn', {
             numUsers: numUsers,
             week: groupToAdvance.week,
-            update: groupToAdvance.users[i]
+            update: groupToAdvance.users[i],
+            waitingForOrders: groupToAdvance.waitingForOrders
         });
     }
 
@@ -471,7 +539,8 @@ function resetGame() {
 
 // Register a user
 function registerUser(socketId, userName) {
-    console.log(users);
+    var userExists = users[userName] ? 'yes' : 'no';
+    console.log('registerUser: socketId=' + socketId + ' userName=' + userName + ' userExists=' + userExists);
     // Does the user already exist? If so, verify it's a disconnect
     if (users[userName]) {
         var user = users[userName];
@@ -482,28 +551,79 @@ function registerUser(socketId, userName) {
         return users[userName];
     }
 
-    if (gameStarted) return null;
-
-    // Okay, get them a role
-    if (roles.length == 0) roles = JSON.parse(JSON.stringify(BEER_ROLES));
-    var userRole = roles.shift();
-
-    // Assign them to a group
-    if (groups.length == 0) groups.push({ week: 0, cost: 0, users: [] });
-    var lastGroup = groups[groups.length - 1];
-
-    var user = { "name": userName, "socketId": socketId, "cost": 0, "inventory": starting_inventory, "backlog": 0, "role": userRole };
-    if (lastGroup.users.length < 4) {
-        lastGroup.users.push(user);
-    } else {
-        var newGroup = { week: 0, cost: 0, users: [] };
-        newGroup.users.push(user);
-        groups.push(newGroup);
+    // Allow joining even if game started, if there's an empty slot in any group
+    // First, check if there's a slot in an existing group
+    var assignedGroup = -1;
+    var assignedIndex = -1;
+    
+    for (var g = 0; g < groups.length; g++) {
+        if (groups[g].users.length < 4) {
+            // Check if this group has all roles filled
+            var roleTaken = [false, false, false, false];
+            for (var u = 0; u < groups[g].users.length; u++) {
+                var roleIdx = BEER_ROLES.findIndex(r => r.name === groups[g].users[u].role.name);
+                if (roleIdx >= 0) roleTaken[roleIdx] = true;
+            }
+            
+            // Find first available role
+            for (var r = 0; r < 4; r++) {
+                if (!roleTaken[r]) {
+                    assignedGroup = g;
+                    assignedIndex = r;
+                    break;
+                }
+            }
+            if (assignedGroup >= 0) break;
+        }
     }
 
-    var userLookup = { "name": userName, "socketId": socketId, "group": groups.length - 1, "index": groups[groups.length - 1].users.length - 1 };
-    // Let's update our big table
-    console.log(user);
-    users[userName] = userLookup;
-    return userLookup;
+    // Get role - either from available slot or create new role
+    var userRole;
+    if (assignedGroup >= 0) {
+        userRole = JSON.parse(JSON.stringify(BEER_ROLES[assignedIndex]));
+    } else {
+        // All groups are full or have all roles taken, create new group
+        if (roles.length == 0) roles = JSON.parse(JSON.stringify(BEER_ROLES));
+        userRole = roles.shift();
+    }
+
+    // Assign them to a group
+    if (assignedGroup >= 0) {
+        // Fill empty slot in existing group
+        var user = { "name": userName, "socketId": socketId, "cost": 0, "inventory": starting_inventory, "backlog": 0, "role": userRole };
+        groups[assignedGroup].users[assignedIndex] = user;
+        var userLookup = { "name": userName, "socketId": socketId, "group": assignedGroup, "index": assignedIndex };
+        users[userName] = userLookup;
+
+        // Check if group is now complete (4 players)
+        if (groups[assignedGroup].users.length == 4) {
+            groups[assignedGroup].ready = true;
+            // Notify all players in this group that their group is ready
+            io.to(assignedGroup).emit('group ready', {
+                groupNum: assignedGroup,
+                group: groups[assignedGroup]
+            });
+        }
+
+        return userLookup;
+    } else {
+        // Create new group
+        if (groups.length == 0) groups.push({ week: 0, cost: 0, users: [], ready: false });
+        var lastGroup = groups[groups.length - 1];
+
+        var user = { "name": userName, "socketId": socketId, "cost": 0, "inventory": starting_inventory, "backlog": 0, "role": userRole };
+        if (lastGroup.users.length < 4) {
+            lastGroup.users.push(user);
+        } else {
+            var newGroup = { week: 0, cost: 0, users: [], ready: false };
+            newGroup.users.push(user);
+            groups.push(newGroup);
+        }
+
+        var userLookup = { "name": userName, "socketId": socketId, "group": groups.length - 1, "index": groups[groups.length - 1].users.length - 1 };
+        // Let's update our big table
+        console.log(user);
+        users[userName] = userLookup;
+        return userLookup;
+    }
 }

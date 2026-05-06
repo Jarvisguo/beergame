@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>啤酒分销游戏 - 经营绩效报告</title>
+  <style>
+    @media print {
+      body { font-size: 12px; }
+      .no-print { display: none !important; }
+      .page-break { page-break-before: always; }
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: "Helvetica Neue", Arial, "Microsoft YaHei", sans-serif; background: #fff; color: #333; padding: 20px; max-width: 1200px; margin: 0 auto; }
+    h1 { text-align: center; color: #2c5f7a; border-bottom: 3px solid #2c5f7a; padding-bottom: 10px; margin-bottom: 5px; }
+    .subtitle { text-align: center; color: #666; margin-bottom: 25px; font-size: 14px; }
+    .meta-info { display: flex; justify-content: space-between; margin-bottom: 20px; font-size: 13px; color: #888; }
+    .summary-box { background: #f8f9fa; border: 1px solid #e0e0e0; border-radius: 8px; padding: 20px; margin-bottom: 25px; }
+    .summary-box h3 { color: #2c5f7a; margin-bottom: 15px; border-left: 4px solid #2c5f7a; padding-left: 10px; }
+    .group-card { border: 1px solid #ddd; border-radius: 8px; margin-bottom: 20px; overflow: hidden; }
+    .group-header { background: #2c5f7a; color: white; padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; }
+    .group-header h4 { margin: 0; }
+    .rank-badge { background: white; color: #2c5f7a; border-radius: 50%; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 16px; }
+    .group-rank-1 .rank-badge { background: #ffd700; color: #333; }
+    .group-rank-2 .rank-badge { background: #c0c0c0; color: #333; }
+    .group-rank-3 .rank-badge { background: #cd7f32; color: white; }
+    .group-body { padding: 15px 20px; }
+    .metrics-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 15px; }
+    .metric-item { background: #f0f4f8; border-radius: 6px; padding: 12px; text-align: center; }
+    .metric-label { font-size: 11px; color: #888; text-transform: uppercase; margin-bottom: 4px; }
+    .metric-value { font-size: 20px; font-weight: bold; color: #2c5f7a; }
+    .metric-value.cost { color: #e63946; }
+    .metric-value.positive { color: #2a9d8f; }
+    .role-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .role-table th { background: #e8eef3; padding: 8px 12px; text-align: left; border-bottom: 2px solid #c5d5e5; }
+    .role-table td { padding: 8px 12px; border-bottom: 1px solid #eee; }
+    .role-table tr:hover { background: #f9fbfe; }
+    .mini-chart { height: 120px; display: flex; align-items: flex-end; gap: 3px; margin-top: 10px; }
+    .mini-bar { flex: 1; background: #2c5f7a; border-radius: 2px 2px 0 0; min-height: 5px; position: relative; cursor: pointer; transition: background 0.2s; }
+    .mini-bar:hover { background: #1a4a5f; }
+    .mini-bar::after { content: attr(data-val); position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); font-size: 9px; color: #888; white-space: nowrap; }
+    .mini-bar.week1 { background: #4a90d9; }
+    .mini-bar.week8 { background: #5ba0e0; }
+    .mini-bar.week19 { background: #6bb0e7; }
+    .mini-bar.week26 { background: #7cc0ee; }
+    .mini-bar.week39 { background: #8dd0f5; }
+    .discussion-section { background: #fff9e6; border: 1px solid #f0d77a; border-radius: 8px; padding: 20px; margin-top: 30px; }
+    .discussion-section h3 { color: #8a6d3b; margin-bottom: 15px; }
+    .discussion-section ul { padding-left: 20px; }
+    .discussion-section li { margin-bottom: 8px; line-height: 1.6; }
+    .bullwhip-indicator { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; }
+    .bullwhip-low { background: #d4edda; color: #155724; }
+    .bullwhip-medium { background: #fff3cd; color: #856404; }
+    .bullwhip-high { background: #f8d7da; color: #721c24; }
+    .btn-print { position: fixed; top: 20px; right: 20px; background: #2c5f7a; color: white; border: none; padding: 12px 24px; border-radius: 6px; font-size: 14px; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
+    .btn-print:hover { background: #1a4a5f; }
+    .week-marker { border-left: 2px dashed #ccc; }
+    .footer { text-align: center; margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; color: #999; font-size: 12px; }
+    .key-insight { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 15px 20px; border-radius: 8px; margin: 20px 0; }
+    .key-insight strong { display: block; margin-bottom: 5px; font-size: 14px; }
+    .key-insight span { font-size: 13px; opacity: 0.9; }
+  </style>
+</head>
+<body>
+
+<button class="btn-print no-print" onclick="window.print()">🖨️ 打印报告</button>
+
+<h1>🍺 啤酒分销游戏 - 经营绩效报告</h1>
+<div class="subtitle">Supply Chain Bullwhip Effect Simulation Report</div>
+
+<div class="meta-info">
+  <span id="reportDate">生成时间：加载中...</span>
+  <span id="gameWeeks">游戏周期：- 周</span>
+  <span id="totalGroups">团队数量：- 组</span>
+</div>
+
+<div class="summary-box">
+  <h3>📊 全局概览</h3>
+  <div class="metrics-grid" id="globalMetrics">
+    <div class="metric-item">
+      <div class="metric-label">总参与人数</div>
+      <div class="metric-value" id="totalPlayers">-</div>
+    </div>
+    <div class="metric-item">
+      <div class="metric-label">冠军团队成本</div>
+      <div class="metric-value cost" id="bestCost">-</div>
+    </div>
+    <div class="metric-item">
+      <div class="metric-label">平均团队成本</div>
+      <div class="metric-value" id="avgCost">-</div>
+    </div>
+    <div class="metric-item">
+      <div class="metric-label">最高团队成本</div>
+      <div class="metric-value cost" id="worstCost">-</div>
+    </div>
+  </div>
+</div>
+
+<div id="groupsContainer"></div>
+
+<div class="key-insight" id="keyInsight">
+  <strong>💡 关键洞察</strong>
+  <span id="insightText">分析中...</span>
+</div>
+
+<div class="discussion-section">
+  <h3>🎯 复盘讨论要点</h3>
+  <ul id="discussionPoints">
+    <li>为什么大多数团队的成本会随游戏进行而增加？</li>
+    <li>牛鞭效应在数据中是如何体现的？（订单波动 vs 需求波动）</li>
+    <li>如果你是零售商，如何避免"恐慌性订购"？</li>
+    <li>信息共享和VMI（供应商管理库存）能多大程度解决问题？</li>
+    <li>系统思维：为什么每个人的"理性"决策导致了整体的非理性结果？</li>
+  </ul>
+</div>
+
+<div class="footer">
+  啤酒分销游戏（Beer Distribution Game）| MIT供应链管理教学案例<br>
+  本报告由帕克自动生成 🍺🦐
+</div>
+
+<script src="socket.io-1.2.0.js"></script>
+<script>
+  // Connect to game server to get current game state
+  var reportSocket = io();
+  reportSocket.on('connect', function() {
+    reportSocket.emit('submit password', 'admin', function(msg) {
+      if (msg && msg.groups && msg.groups[0]) {
+        // Store in sessionStorage for persistence
+        try {
+          sessionStorage.setItem('beerGameGroup', JSON.stringify(msg.groups));
+        } catch(e) {}
+        // Make available globally
+        window.gameGroup = msg.groups;
+        generateReport();
+      }
+    });
+  });
+</script>
+<script>
+  // Generate report from current game state
+  function generateReport() {
+    // Try to get gameGroup from sessionStorage (set by admin.js)
+    var gameGroupData = null;
+    try {
+      var stored = sessionStorage.getItem('beerGameGroup');
+      if (stored) {
+        gameGroupData = JSON.parse(stored);
+      }
+    } catch (e) {}
+    
+    var gameGroup = gameGroupData || window.gameGroup;
+    
+    if (!gameGroup || !gameGroup[0]) {
+      document.getElementById('groupsContainer').innerHTML = '<p style="text-align:center;color:#888;padding:40px;">暂无游戏数据。请先开始一场游戏。</p>';
+      return;
+    }
+
+    var totalPlayers = 0;
+    var allCosts = [];
+    var allWeeks = 0;
+
+    // Calculate global stats
+    for (var g = 0; g < gameGroup.length; g++) {
+      totalPlayers += gameGroup[g].users.length;
+      if (gameGroup[g].cost > 0) allCosts.push(gameGroup[g].cost);
+      if (gameGroup[g].week > allWeeks) allWeeks = gameGroup[g].week;
+    }
+
+    document.getElementById('totalPlayers').textContent = totalPlayers + ' 人';
+    document.getElementById('gameWeeks').textContent = '游戏周期：' + (allWeeks > 0 ? allWeeks + ' 周' : '尚未开始');
+    document.getElementById('totalGroups').textContent = '团队数量：' + gameGroup.length + ' 组';
+    document.getElementById('reportDate').textContent = '生成时间：' + new Date().toLocaleString('zh-CN');
+
+    if (allCosts.length > 0) {
+      allCosts.sort(function(a, b) { return a - b; });
+      var avg = allCosts.reduce(function(a, b) { return a + b; }, 0) / allCosts.length;
+      document.getElementById('bestCost').textContent = '¥' + Math.round(allCosts[0]);
+      document.getElementById('avgCost').textContent = '¥' + Math.round(avg);
+      document.getElementById('worstCost').textContent = '¥' + Math.round(allCosts[allCosts.length - 1]);
+    }
+
+    // Sort groups by cost (lowest first)
+    var sortedGroups = JSON.parse(JSON.stringify(gameGroup));
+    sortedGroups.sort(function(a, b) { return a.cost - b.cost; });
+
+    // Generate group cards
+    var html = '';
+    for (var rank = 0; rank < sortedGroups.length; rank++) {
+      var group = sortedGroups[rank];
+      var groupNum = rank + 1;
+
+      // Calculate bullwhip metrics for each role
+      var bullwhipData = [];
+      
+      for (var u = 0; u < group.users.length; u++) {
+        var user = group.users[u];
+        if (!user) continue;
+        
+        var orderHistory = user.orderHistory || [];
+        var inventoryHistory = user.inventoryHistory || [];
+        var backlogHistory = user.backlogHistory || [];
+        
+        // Get downstream orders (what this role receives)
+        var downstreamOrders = [];
+        if (user.role && user.role.downstream && user.role.downstream.name !== '客户') {
+          // Find the upstream role in the chain
+          var downstreamName = user.role.downstream.name;
+          var downstreamUser = group.users.find(function(ru) {
+            return ru && ru.role && ru.role.name === downstreamName;
+          });
+          if (downstreamUser) {
+            downstreamOrders = downstreamUser.orderHistory || [];
+          }
+        }
+        
+        // Calculate metrics
+        var orders = orderHistory.filter(function(x) { return !isNaN(x) && x !== undefined; });
+        var mean = orders.length > 0 ? orders.reduce(function(a, b) { return a + b; }, 0) / orders.length : 0;
+        var variance = orders.length > 0 ? orders.reduce(function(a, b) { return a + Math.pow(b - mean, 2); }, 0) / orders.length : 0;
+        var stdDev = Math.sqrt(variance);
+        var cv = mean > 0 ? stdDev / mean : 0;  // Coefficient of Variation
+        
+        // Order range
+        var maxOrder = orders.length > 0 ? Math.max.apply(null, orders) : 0;
+        var minOrder = orders.length > 0 ? Math.min.apply(null, orders) : 0;
+        var orderRange = maxOrder - minOrder;
+        
+        // Bullwhip ratio: compare with downstream demand variance
+        var downstreamCV = 0;
+        if (downstreamOrders.length > 0) {
+          var downMean = downstreamOrders.reduce(function(a, b) { return a + b; }, 0) / downstreamOrders.length;
+          var downVar = downstreamOrders.reduce(function(a, b) { return a + Math.pow(b - downMean, 2); }, 0) / downstreamOrders.length;
+          var downStd = Math.sqrt(downVar);
+          downstreamCV = downMean > 0 ? downStd / downMean : 0;
+        }
+        
+        // Bullwhip ratio: this role's CV / downstream CV
+        // If ratio > 1, demand is amplified (bullwhip effect)
+        var bullwhipRatio = downstreamCV > 0 ? cv / downstreamCV : 1;
+        
+        // Alternative: simple amplification = max order / max downstream order
+        var downstreamMax = downstreamOrders.length > 0 ? Math.max.apply(null, downstreamOrders.filter(function(x) { return !isNaN(x); })) : 0;
+        var simpleAmplify = downstreamMax > 0 ? maxOrder / downstreamMax : 1;
+        
+        // Final bullwhip score (0-100)
+        // Higher score = more severe bullwhip effect
+        var bullwhipScore = 0;
+        if (orders.length >= 3) {
+          // Use the larger of CV-based ratio or simple amplification
+          var effect = Math.max(bullwhipRatio, simpleAmplify);
+          bullwhipScore = Math.min(100, Math.round((effect - 1) * 50));  // 0 = no effect, 100 = severe
+        }
+        
+        bullwhipData.push({
+          name: user.name || '玩家',
+          role: user.role && user.role.name ? user.role.name : '未知角色',
+          finalCost: user.cost || 0,
+          finalInventory: user.inventory || 0,
+          finalBacklog: backlogHistory.length > 0 ? backlogHistory[backlogHistory.length - 1] : 0,
+          mean: mean,
+          stdDev: stdDev,
+          cv: cv,
+          orderRange: orderRange,
+          orderHistory: orders,
+          bullwhipRatio: bullwhipRatio,
+          simpleAmplify: simpleAmplify,
+          bullwhipScore: bullwhipScore
+        });
+      }
+      
+      // Team bullwhip: max score among all roles
+      var maxBullwhip = Math.max.apply(null, bullwhipData.map(function(d) { return d.bullwhipScore; }));
+      
+      // Determine bullwhip level
+      var bullwhipLevel = 'low';
+      var bullwhipLabel = '无牛鞭效应';
+      if (maxBullwhip > 50) {
+        bullwhipLevel = 'high';
+        bullwhipLabel = '严重牛鞭效应';
+      } else if (maxBullwhip > 20) {
+        bullwhipLevel = 'medium';
+        bullwhipLabel = '中等牛鞭效应';
+      } else if (maxBullwhip > 5) {
+        bullwhipLevel = 'low';
+        bullwhipLabel = '轻微牛鞭效应';
+      }
+      
+      // Calculate team metrics
+      var maxInventory = Math.max.apply(null, bullwhipData.map(function(d) { return d.finalInventory; }));
+      var totalBacklog = bullwhipData.reduce(function(a, d) { return a + d.finalBacklog; }, 0);
+      var totalCost = bullwhipData.reduce(function(a, d) { return a + d.finalCost; }, 0);
+
+      // Generate mini bar chart for group
+      var barsHtml = '';
+      var allOrders = [];
+      for (var u = 0; u < bullwhipData.length; u++) {
+        allOrders = allOrders.concat(bullwhipData[u].orderHistory || []);
+      }
+      if (allOrders.length > 0) {
+        var maxAllOrder = Math.max.apply(null, allOrders);
+        for (var w = 0; w < allOrders.length; w++) {
+          var height = maxAllOrder > 0 ? (allOrders[w] / maxAllOrder) * 100 : 0;
+          var barClass = '';
+          if (w < 8) barClass = 'week1';
+          else if (w < 19) barClass = 'week8';
+          else if (w < 26) barClass = 'week19';
+          else if (w < 39) barClass = 'week26';
+          else barClass = 'week39';
+          barsHtml += '<div class="mini-bar ' + barClass + '" style="height:' + height + '%" data-val="W' + (w+1) + ': ' + allOrders[w] + '"></div>';
+        }
+      }
+
+      html += '<div class="group-card group-rank-' + groupNum + '">' +
+        '<div class="group-header">' +
+          '<div><h4>第 ' + groupNum + ' 名团队</h4><small style="opacity:0.8">完成第 ' + group.week + ' 周</small></div>' +
+          '<div class="rank-badge">' + groupNum + '</div>' +
+        '</div>' +
+        '<div class="group-body">' +
+          '<div class="metrics-grid">' +
+            '<div class="metric-item"><div class="metric-label">总成本</div><div class="metric-value cost">¥' + Math.round(group.cost) + '</div></div>' +
+            '<div class="metric-item"><div class="metric-label">最高库存</div><div class="metric-value">' + Math.round(maxInventory) + '</div></div>' +
+            '<div class="metric-item"><div class="metric-label">积压总计</div><div class="metric-value">' + Math.round(totalBacklog) + '</div></div>' +
+            '<div class="metric-item"><div class="metric-label">牛鞭程度</div><div class="metric-value"><span class="bullwhip-indicator bullwhip-' + bullwhipLevel + '">' + bullwhipLabel + '</span></div></div>' +
+          '</div>' +
+          '<table class="role-table">' +
+            '<thead><tr><th>角色</th><th>玩家</th><th>成本</th><th>库存</th><th>积压</th><th>均值</th><th>波动</th><th>牛鞭分</th></tr></thead>' +
+            '<tbody>';
+
+      for (var u = 0; u < bullwhipData.length; u++) {
+        var rd = bullwhipData[u];
+        var bClass = rd.bullwhipScore > 50 ? 'high' : (rd.bullwhipScore > 20 ? 'medium' : 'low');
+        html += '<tr>' +
+          '<td>' + rd.role + '</td>' +
+          '<td>' + rd.name + '</td>' +
+          '<td>¥' + Math.round(rd.finalCost) + '</td>' +
+          '<td>' + Math.round(rd.finalInventory) + '</td>' +
+          '<td>' + Math.round(rd.finalBacklog) + '</td>' +
+          '<td>' + rd.mean.toFixed(1) + '</td>' +
+          '<td>±' + rd.stdDev.toFixed(1) + '</td>' +
+          '<td><span class="bullwhip-indicator bullwhip-' + bClass + '">' + rd.bullwhipScore + '%</span></td>' +
+        '</tr>';
+      }
+
+      html += '</tbody></table>' +
+        '<div style="margin-top:10px;font-size:11px;color:#888;">订单量趋势：</div>' +
+        '<div class="mini-chart">' + barsHtml + '</div>' +
+      '</div></div>';
+    }
+
+    document.getElementById('groupsContainer').innerHTML = html;
+
+    // Key insight
+    if (allCosts.length > 0) {
+      var best = allCosts[0];
+      var worst = allCosts[allCosts.length - 1];
+      var ratio = worst / best;
+      var insight = '';
+      if (ratio > 5) {
+        insight = '各团队成本差距非常大（' + Math.round(ratio) + '倍），说明供应链协调能力差异显著。冠军团队的成本控制策略值得深入分析。';
+      } else if (ratio > 2) {
+        insight = '优秀团队的成本不到最差团队的1/' + Math.round(ratio) + '。牛鞭效应对各团队的影响差异明显。';
+      } else {
+        insight = '所有团队都面临类似的挑战。牛鞭效应是系统性问题，需要从供应链整体协调的角度来解决。';
+      }
+      document.getElementById('insightText').textContent = insight;
+    }
+  }
+
+  // Auto-generate on load
+  window.onload = function() {
+    // Wait a bit for admin.js to load game data
+    setTimeout(generateReport, 500);
+  };
+</script>
+</body>
+</html>
