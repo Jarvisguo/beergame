@@ -3,6 +3,8 @@ const fs = require('fs');
 const vm = require('vm');
 
 const updates = {};
+const attrs = {};
+const values = {};
 const selectorApi = {
   text(value) {
     if (value !== undefined) updates[this.selector] = value;
@@ -13,8 +15,14 @@ const selectorApi = {
   fadeIn() { return this; },
   fadeOut() { return this; },
   modal() { return this; },
-  attr() { return this; },
-  val() { return this; },
+  attr(name, value) {
+    if (value !== undefined) attrs[this.selector + ':' + name] = value;
+    return this;
+  },
+  val(value) {
+    if (value !== undefined) values[this.selector] = value;
+    return this;
+  },
   html(value) {
     if (value !== undefined) updates[this.selector] = value;
     return this;
@@ -97,5 +105,27 @@ assert.strictEqual(updates['#userRole'], '工厂（您）');
 assert.strictEqual(updates['#downstreamRole'], '区域仓库');
 assert.strictEqual(updates['#upstreamRole'], '工厂');
 assert.strictEqual(updates['#inventoryAmt'], 12);
+
+handlers['next turn']({
+  numUsers: 4,
+  week: 26,
+  update: context.curUser,
+  waitingForOrders: ['零售商', '批发商', '区域仓库', '工厂']
+});
+
+assert.strictEqual(updates['#participants'], '游戏已开始。您在第 26 周。当前有 4 名参与者。');
+assert.strictEqual(attrs['#btnOrder:disabled'], false);
+
+handlers['next turn']({
+  numUsers: 4,
+  week: 27,
+  update: context.curUser,
+  waitingForOrders: []
+});
+
+assert.strictEqual(updates['#participants'], '游戏已完成 26 周。当前有 4 名参与者。');
+assert.strictEqual(values['#formOrderAmount'], '已结束');
+assert.strictEqual(attrs['#btnOrder:disabled'], true);
+assert.strictEqual(updates['#waitingOnUsers'], '<span class="label label-danger">⛔ 已完成26周，停止运营</span>');
 
 console.log('client board test passed');

@@ -121,6 +121,15 @@
 
 <script>
   // Generate report from current game state
+  var maxWeeks = 26;
+
+  function formatGameWeek(week) {
+    if (week <= 0) return '游戏周期：尚未开始';
+    var completedWeeks = Math.max(0, Math.min(week - 1, maxWeeks));
+    if (week > maxWeeks) return '已完成 ' + completedWeeks + ' 轮';
+    return '已完成 ' + completedWeeks + ' 轮，当前第 ' + week + ' 周';
+  }
+
   function generateReport() {
     // Try to get gameGroup from sessionStorage (set by admin.js)
     var gameGroupData = null;
@@ -150,7 +159,7 @@
     }
 
     document.getElementById('totalPlayers').textContent = totalPlayers + ' 人';
-    document.getElementById('gameWeeks').textContent = '游戏周期：' + (allWeeks > 0 ? allWeeks + ' 周' : '尚未开始');
+    document.getElementById('gameWeeks').textContent = formatGameWeek(allWeeks);
     document.getElementById('totalGroups').textContent = '团队数量：' + gameGroup.length + ' 组';
     document.getElementById('reportDate').textContent = '生成时间：' + new Date().toLocaleString('zh-CN');
 
@@ -239,7 +248,7 @@
           role: user.role && user.role.name ? user.role.name : '未知角色',
           finalCost: user.cost || 0,
           finalInventory: user.inventory || 0,
-          finalBacklog: backlogHistory.length > 0 ? backlogHistory[backlogHistory.length - 1] : 0,
+          finalBacklog: user.backlog || 0,
           mean: mean,
           stdDev: stdDev,
           cv: cv,
@@ -295,7 +304,7 @@
 
       html += '<div class="group-card group-rank-' + groupNum + '">' +
         '<div class="group-header">' +
-          '<div><h4>第 ' + groupNum + ' 名团队</h4><small style="opacity:0.8">完成第 ' + group.week + ' 周</small></div>' +
+          '<div><h4>第 ' + groupNum + ' 名团队</h4><small style="opacity:0.8">' + formatGameWeek(group.week || 0) + '</small></div>' +
           '<div class="rank-badge">' + groupNum + '</div>' +
         '</div>' +
         '<div class="group-body">' +

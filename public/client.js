@@ -17,6 +17,11 @@ var submittedOrder = false;
 var userIdx = 0;
 var curGroup;
 var gameEnded = false;
+var maxWeeks = 26;
+
+function hasCompletedFinalWeek() {
+    return curWeek > maxWeeks;
+}
 
 var countOptions = {
     useEasing: true,
@@ -62,19 +67,19 @@ $(document).ready(function () {
                 if (curWeek > 0 && !gameEnded) {
                     nextTurn(numUsers, curWeek, curUser);
                     // 加入游戏时：如果自己已不在等待列表中，说明本轮已提交
-                    if (curGroup.waitingForOrders.indexOf(curUser.role.name) < 0) {
+                    if (hasCompletedFinalWeek()) {
+                        // 达到总轮次上限后不允许下单
+                        submittedOrder = true;
+                        $("#formOrderAmount").val('已结束');
+                        $("#btnOrder").attr("disabled", true);
+                        $("#formOrderAmount").attr("disabled", true);
+                        $('#waitingOnUsers').html('<span class="label label-danger">⛔ 已完成' + maxWeeks + '周，停止运营</span>').fadeIn('fast');
+                    } else if (curGroup.waitingForOrders.indexOf(curUser.role.name) < 0) {
                         submittedOrder = true;
                         $("#formOrderAmount").val(curUser.role.upstream.orders);
                         $("#btnOrder").attr("disabled", true);
                         $("#formOrderAmount").attr("disabled", true);
                         updateWait(curGroup.waitingForOrders);
-                    } else if (curWeek >= 50) {
-                        // 50周后不允许下单
-                        submittedOrder = true;
-                        $("#formOrderAmount").val('已结束');
-                        $("#btnOrder").attr("disabled", true);
-                        $("#formOrderAmount").attr("disabled", true);
-                        $('#waitingOnUsers').html('<span class="label label-danger">⛔ 游戏已达50周上限，停止运营</span>').fadeIn('fast');
                     } else {
                         // 自己的角色还在等待列表中，可以提交
                         submittedOrder = false;
@@ -328,7 +333,11 @@ function updateStatus() {
     }
 
     if (curWeek > 0 && !gameEnded) {
-        $('#participants').text('游戏已开始。您在第 ' + curWeek + ' 周。' + numParticipants);
+        if (hasCompletedFinalWeek()) {
+            $('#participants').text('游戏已完成 ' + maxWeeks + ' 周。' + numParticipants);
+        } else {
+            $('#participants').text('游戏已开始。您在第 ' + curWeek + ' 周。' + numParticipants);
+        }
     } else if (!gameEnded) {
         $('#participants').text('等待游戏开始。' + numParticipants);
     } else {
@@ -365,7 +374,7 @@ function nextTurn(users, week, user) {
     updateBoard();
 
     // nextTurn 更新页面数据（不再弹窗）
-    $("span.weekText").text("第 " + week + " 周");
+    $("span.weekText").text(hasCompletedFinalWeek() ? "已完成 " + maxWeeks + " 周" : "第 " + week + " 周");
 }
 
 // 更新实时数据分析面板
@@ -374,10 +383,10 @@ function updateAnalytics() {
     $('#analyticsPanel').show();
     
     // 更新周数
-    $('#currentWeek').text(curWeek || 0);
+    $('#currentWeek').text(Math.min(curWeek || 0, maxWeeks));
     
     // 更新进度条
-    var progress = Math.min(100, ((curWeek || 0) / 26) * 100);
+    var progress = Math.min(100, ((curWeek || 0) / maxWeeks) * 100);
     $('#weekProgress').css('width', progress + '%');
     
     // 更新成本图表
@@ -428,8 +437,8 @@ function updateAnalytics() {
     // 供应链状态
     if (curUser) {
         var status = '';
-        if (curWeek >= 50) {
-            status = '<span class="label label-danger">⛔ 已达50周上限</span>';
+        if (hasCompletedFinalWeek()) {
+            status = '<span class="label label-danger">⛔ 已完成' + maxWeeks + '周</span>';
         } else if (curUser.backlog > 20) {
             status = '<span class="label label-danger">⚠️ 严重积压(' + curUser.backlog + ')</span>';
         } else if (curUser.backlog > 5) {
@@ -442,9 +451,9 @@ function updateAnalytics() {
         $('#supplyChainStatus').html(status);
     }
     
-    // 50周警告
-    if (curWeek >= 45 && !$('#weekProgress').parent().find('.week-warning').length) {
-        $('#weekProgress').parent().append('<small class="week-warning" style="color:#e63946;margin-left:10px;">⚠️ 即将到达50周上限！</small>');
+    // 总轮次警告
+    if (curWeek >= maxWeeks - 5 && !hasCompletedFinalWeek() && !$('#weekProgress').parent().find('.week-warning').length) {
+        $('#weekProgress').parent().append('<small class="week-warning" style="color:#e63946;margin-left:10px;">⚠️ 即将到达' + maxWeeks + '周上限！</small>');
     }
 }
 
@@ -483,7 +492,7 @@ socket.on('game started', function (msg) {
     $('#newOrder').fadeIn('fast');
     $("#btnOrder").attr("disabled", false);
     $("#formOrderAmount").attr("disabled", false);
-    $("span.weekText").text("第 " + msg.week + " 周");
+    $("span.weekText").text(hasCompletedFinalWeek() ? "已完成 " + maxWeeks + " 周" : "第 " + msg.week + " 周");
     gameEnded = false;
 });
 
@@ -523,7 +532,14 @@ socket.on('next turn', function (msg) {
     }
     var myRoleWaiting = curUser && msg.waitingForOrders && msg.waitingForOrders.indexOf(curUser.role.name) >= 0;
     submittedOrder = !myRoleWaiting;
-    if (!submittedOrder) {
+    if (msg.week > maxWeeks) {
+        submittedOrder = true;
+        $('#newOrder').fadeOut('fast');
+        $("#formOrderAmount").val('已结束');
+        $("#btnOrder").attr("disabled", true);
+        $("#formOrderAmount").attr("disabled", true);
+        $('#waitingOnUsers').html('<span class="label label-danger">⛔ 已完成' + maxWeeks + '周，停止运营</span>').fadeIn('fast');
+    } else if (!submittedOrder) {
         $('#newOrder').fadeIn('fast');
         $("#btnOrder").attr("disabled", false);
         $("#formOrderAmount").attr("disabled", false);

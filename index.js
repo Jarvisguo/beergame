@@ -45,6 +45,7 @@ var inventory_cost = 0.5;
 var backlog_cost = 1;
 var starting_inventory = 12;
 var starting_throughput = 4;
+var max_weeks = 26;
 var customer_demand = [4, 8, 12, 16, 20];
 var admin_password = process.env.ADMIN_PASSWORD || "admin";
 var reconnect_grace_ms = parseInt(process.env.MOBILE_RECONNECT_GRACE_MS || "300000", 10);
@@ -398,10 +399,10 @@ io.on('connection', function (socket) {
             return ack(callback, { err: "Group not found" });
         }
         
-        // Check if game has exceeded 50 weeks (no more orders accepted)
-        if (group.week >= 50) {
-            console.log("submit order ignored: game week " + group.week + " >= 50");
-            return ack(callback, { err: "Game has exceeded 50 weeks. No more orders accepted." });
+        // Week is the active ordering week. Stop only after the final week has been completed.
+        if (group.week > max_weeks) {
+            console.log("submit order ignored: game week " + group.week + " > " + max_weeks);
+            return ack(callback, { err: "Game has completed " + max_weeks + " weeks. No more orders accepted." });
         }
 
         console.log("User: " + socket.name);
@@ -553,7 +554,7 @@ function advanceTurn(group) {
 
     // Next week
     groupToAdvance.week++;
-    groupToAdvance.waitingForOrders = JSON.parse(JSON.stringify(BEER_NAMES));
+    groupToAdvance.waitingForOrders = groupToAdvance.week > max_weeks ? [] : JSON.parse(JSON.stringify(BEER_NAMES));
 
     // Message to each user
     for (var i = 0; i < groupToAdvance.users.length; i++) {

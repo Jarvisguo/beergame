@@ -175,7 +175,7 @@ function reportMetricsFor(user) {
   return {
     finalCost: user.cost,
     finalInventory: user.inventory,
-    finalBacklog: user.backlogHistory[user.backlogHistory.length - 1],
+    finalBacklog: user.backlog,
     mean: mean(user.orderHistory),
     stdDev: stdDev(user.orderHistory)
   };
@@ -243,7 +243,7 @@ async function main() {
     const totalPlayers = actualGroup.users.length;
     const allCosts = [actualGroup.cost];
     assert.strictEqual(totalPlayers, 4, 'report total players');
-    assert.strictEqual(`游戏周期：${actualGroup.week} 周`, '游戏周期：6 周');
+    assert.strictEqual(`已完成 ${actualGroup.week - 1} 轮，当前第 ${actualGroup.week} 周`, '已完成 5 轮，当前第 6 周');
     assert.strictEqual(`团队数量：${1} 组`, '团队数量：1 组');
     assert.strictEqual(`¥${Math.round(Math.min(...allCosts))}`, `¥${Math.round(expected.group.cost)}`);
     assert.strictEqual(`¥${Math.round(mean(allCosts))}`, `¥${Math.round(expected.group.cost)}`);

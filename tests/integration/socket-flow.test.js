@@ -279,6 +279,38 @@ async function assertNoAckCrash() {
   }
 }
 
+async function assertWeekLimitStopsOrdersAt26() {
+  const admin = await connectClient();
+  const players = [];
+  try {
+    for (let i = 0; i < 4; i++) {
+      players.push(await connectClient());
+      await emit(players[i], 'submit username', `limit-${i + 1}`);
+    }
+
+    await emit(admin, 'submit password', ADMIN_PASSWORD);
+    await Promise.all(players.map((socket) => once(socket, 'game started')).concat([emit(admin, 'start game')]));
+
+    for (let round = 1; round <= 26; round++) {
+      const nextTurnEvents = players.map((socket) => once(socket, 'next turn'));
+      for (let i = 0; i < players.length; i++) {
+        await emit(players[i], 'submit order', 4);
+      }
+      const turns = await Promise.all(nextTurnEvents);
+      assert.strictEqual(turns[0].week, round + 1);
+      if (round === 26) {
+        assert.deepStrictEqual(turns[0].waitingForOrders, []);
+      }
+    }
+
+    const rejected = await emit(players[0], 'submit order', 4);
+    assert.deepStrictEqual(rejected, { err: 'Game has completed 26 weeks. No more orders accepted.' });
+  } finally {
+    admin.close();
+    players.forEach((socket) => socket && socket.close());
+  }
+}
+
 async function main() {
   const server = spawn(process.execPath, ['index.js'], {
     cwd: process.cwd(),
@@ -314,6 +346,7 @@ async function main() {
     await runIsolated(assertDisconnectExpiresAfterGrace);
     await runIsolated(assertGraceAllowsStart);
     await runIsolated(assertNoAckCrash);
+    await runIsolated(assertWeekLimitStopsOrdersAt26);
   } catch (err) {
     console.error(output);
     throw err;

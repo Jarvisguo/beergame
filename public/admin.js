@@ -16,6 +16,14 @@ window.gameGroup = undefined;
 var gameGroup;
 var adminGameStarted = false;
 var adminGameEnded = false;
+var maxWeeks = 26;
+
+function formatGroupWeek(group) {
+    var week = group.week || 0;
+    var completedWeeks = Math.max(0, Math.min(week - 1, maxWeeks));
+    if (week > maxWeeks) return "已完成 " + completedWeeks + " 轮";
+    return "已完成 " + completedWeeks + " 轮，当前第 " + week + " 周";
+}
 
 google.charts.load('current', { packages: ['corechart'] });
 
@@ -218,11 +226,15 @@ function showChart() {
 function refreshTable(groups, numUsers, gameStarted) {
     $('#grouptable > tbody').html("");
     for (var i = 0; i < groups.length; i++) {
-        var week = gameStarted ? " (第 " + groups[i].week + " 周，¥" + parseFloat(groups[i].cost).toFixed(0) + ")" : ""
+        var week = gameStarted ? " (" + formatGroupWeek(groups[i]) + "，¥" + parseFloat(groups[i].cost || 0).toFixed(0) + ")" : ""
         $('#grouptable > tbody').append('<tr id=\'group' + i + '\'><td>' + (i + 1) + week + '</td></tr>');
         var userDisconnected = false;
+        var totalInventory = 0;
+        var totalBacklog = 0;
         for (var j = 0; j < 4; j++) {
             if (groups[i].users[j]) {
+                totalInventory += groups[i].users[j].inventory || 0;
+                totalBacklog += groups[i].users[j].backlog || 0;
                 if (groups[i].users[j].socketId) {
                     var userCell = '<td>' + groups[i].users[j].name + '</td>';
                 } else {
@@ -235,8 +247,15 @@ function refreshTable(groups, numUsers, gameStarted) {
             $('#group' + i).append(userCell);
         }
 
+        var waitingForOrders = groups[i].waitingForOrders || [];
+        $('#group' + i).append('<td>' + totalInventory + '</td>');
+        $('#group' + i).append('<td>' + totalBacklog + '</td>');
+        $('#group' + i).append('<td>' + (waitingForOrders.length ? waitingForOrders.join('、') : '-') + '</td>');
+
         if (!gameStarted) {
             $('#group' + i).append('<td><button type="button" class="btn btn-danger btn-xs btnRemoveGroup" group="' + i + '"><span class="glyphicon glyphicon-remove" aria-hidden="true"></span></button></td>');
+        } else {
+            $('#group' + i).append('<td></td>');
         }
 
         if (userDisconnected) $('#group' + i).addClass("danger");
@@ -267,32 +286,46 @@ function drawChart(group, type) {
     data.addColumn('string', 'X');
 
     var groupToShow = gameGroup[group];
+    if (!groupToShow || !groupToShow.users || groupToShow.users.length == 0) return;
 
-    for (var i = 0; i < gameGroup[group].users.length; i++) {
-        data.addColumn('number', gameGroup[group].users[i].role.name);
+    for (var i = 0; i < groupToShow.users.length; i++) {
+        data.addColumn('number', groupToShow.users[i].role.name);
     }
 
-    for (var i = 1; i < gameGroup[group].week; i++) {
-        var dataRow = [i.toString()];
-        for (var j = 0; j < gameGroup[group].users.length; j++) {
+    var maxRows = 0;
+    for (var j = 0; j < groupToShow.users.length; j++) {
+        var user = groupToShow.users[j];
+        var historyLength = 0;
+        if (type == "Cost") historyLength = (user.costHistory || []).length;
+        if (type == "Inventory") historyLength = Math.min((user.inventoryHistory || []).length, (user.backlogHistory || []).length);
+        if (type == "Orders") historyLength = (user.orderHistory || []).length;
+        if (historyLength > maxRows) maxRows = historyLength;
+    }
+
+    for (var i = 0; i < maxRows; i++) {
+        var dataRow = [(i + 1).toString()];
+        for (var j = 0; j < groupToShow.users.length; j++) {
             var numToPush = 0;
+            var user = groupToShow.users[j];
             switch (type) {
                 case "Cost":
-                    numToPush = gameGroup[group].users[j].costHistory[i];
+                    numToPush = (user.costHistory || [])[i];
                     vAxisTitle = "成本 (¥)";
                     break;
                 case "Inventory":
-                    numToPush = parseInt(gameGroup[group].users[j].inventoryHistory[i]) - parseInt(gameGroup[group].users[j].backlogHistory[i]);
+                    var inventory = (user.inventoryHistory || [])[i];
+                    var backlog = (user.backlogHistory || [])[i];
+                    numToPush = (inventory === undefined || backlog === undefined) ? undefined : parseInt(inventory) - parseInt(backlog);
                     vAxisTitle = "库存 (单位)";
                     break;
                 case "Orders":
-                    numToPush = gameGroup[group].users[j].orderHistory[i];
+                    numToPush = (user.orderHistory || [])[i];
                     vAxisTitle = "订单 (单位)";
                     break;
                 default:
             }
 
-            dataRow.push(numToPush);
+            dataRow.push(numToPush === undefined || isNaN(numToPush) ? null : numToPush);
         }
         data.addRows([dataRow]);
     }
