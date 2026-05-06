@@ -3,6 +3,11 @@ logs
 *.log
 npm-debug.log*
 
+# Environment
+.env
+.env.*
+!.env.example
+
 # Runtime data
 pids
 *.pid
@@ -30,6 +35,13 @@ build/Release
 .vscode
 node_modules
 jspm_packages
+
+# Local backups / scratch files
+*.bak
+*.bak*
+*backup*
+*broken*
+*original*
 
 # Optional npm cache directory
 .npm

@@ -46,6 +46,11 @@ var backlog_cost = 1;
 var starting_inventory = 12;
 var starting_throughput = 4;
 var customer_demand = [4, 8, 12, 16, 20];
+var admin_password = process.env.ADMIN_PASSWORD || "admin";
+
+function groupRoom(group) {
+    return String(group);
+}
 
 // This controls how the roles are labeled
 var BEER_NAMES = ["零售商", "批发商", "区域仓库", "工厂"];
@@ -127,9 +132,9 @@ io.on('connection', function (socket) {
             socket.name = user.name;
             addedUser = true;
             callback({ numUsers: numUsers, idx: user.index, group: groups[user.group], gameEnded: gameEnded });
-            socket.join(user.group);
+            socket.join(groupRoom(user.group));
 
-            if (!gameStarted && !gameEnded) io.to(user.group).emit('group member joined', { idx: user.index, update: groups[user.group].users[user.index] });
+            if (!gameStarted && !gameEnded) io.to(groupRoom(user.group)).emit('group member joined', { idx: user.index, update: groups[user.group].users[user.index] });
 
             socket.broadcast.emit('user joined', {
                 username: socket.name,
@@ -169,7 +174,7 @@ io.on('connection', function (socket) {
 
             --numUsers;
 
-            if (!gameStarted) io.to(user.group).emit('group member left', {
+            if (!gameStarted) io.to(groupRoom(user.group)).emit('group member left', {
                 idx: user.index,
                 update: groups[user.group].users[user.index]
             });
@@ -184,8 +189,7 @@ io.on('connection', function (socket) {
 
     // This is called by the admin system
     socket.on('submit password', function (msg, callback) {
-        // Not very secure :P
-        if (msg == "admin") {
+        if (msg == admin_password) {
             socket.join("admins");
 
             var gameStatus = "";
@@ -205,8 +209,8 @@ io.on('connection', function (socket) {
 
     // Acknowledge the change group
     socket.on('change group', function (msg) {
-        socket.leave(msg + 1);
-        socket.join(msg);
+        socket.leave(groupRoom(Number(msg) + 1));
+        socket.join(groupRoom(msg));
     });
 
     // Handshake on boot
@@ -232,7 +236,7 @@ io.on('connection', function (socket) {
             numUsers -= usersToRemove;
 
             // Tell them they're out
-            io.to(msg).emit('kicked out', msg);
+            io.to(groupRoom(msg)).emit('kicked out', msg);
 
             // Update all references
             for (var i = msg; i < groups.length; i++) {
@@ -296,7 +300,7 @@ io.on('connection', function (socket) {
                 g.week = 1;  // 游戏从第1周开始
 
                 // 发给玩家：告知游戏开始，进入第1周等待下单
-                io.to(i).emit('game started', {
+                io.to(groupRoom(i)).emit('game started', {
                     numUsers: numUsers,
                     week: 1,  // 直接从第1周开始（初始化已完成）
                     waitingForOrders: g.waitingForOrders
@@ -375,7 +379,7 @@ io.on('connection', function (socket) {
             advanceTurn(user.group);
         } else {
             callback(group.waitingForOrders);
-            io.to(user.group).emit('update order wait', group.waitingForOrders);
+            io.to(groupRoom(user.group)).emit('update order wait', group.waitingForOrders);
         }
     });
 });
@@ -599,7 +603,7 @@ function registerUser(socketId, userName) {
         if (groups[assignedGroup].users.length == 4) {
             groups[assignedGroup].ready = true;
             // Notify all players in this group that their group is ready
-            io.to(assignedGroup).emit('group ready', {
+            io.to(groupRoom(assignedGroup)).emit('group ready', {
                 groupNum: assignedGroup,
                 group: groups[assignedGroup]
             });

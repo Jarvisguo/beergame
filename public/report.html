@@ -119,24 +119,6 @@
   本报告由帕克自动生成 🍺🦐
 </div>
 
-<script src="socket.io-1.2.0.js"></script>
-<script>
-  // Connect to game server to get current game state
-  var reportSocket = io();
-  reportSocket.on('connect', function() {
-    reportSocket.emit('submit password', 'admin', function(msg) {
-      if (msg && msg.groups && msg.groups[0]) {
-        // Store in sessionStorage for persistence
-        try {
-          sessionStorage.setItem('beerGameGroup', JSON.stringify(msg.groups));
-        } catch(e) {}
-        // Make available globally
-        window.gameGroup = msg.groups;
-        generateReport();
-      }
-    });
-  });
-</script>
 <script>
   // Generate report from current game state
   function generateReport() {

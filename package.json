@@ -7,10 +7,16 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node index.js"
   },
+  "engines": {
+    "node": "18.x"
+  },
   "author": "Miron Vranjes",
   "license": "MIT",
   "dependencies": {
     "express": "^4.14.0",
-    "socket.io": "^1.4.8"
+    "socket.io": "^4.8.3"
+  },
+  "devDependencies": {
+    "socket.io-client": "^4.8.3"
   }
 }

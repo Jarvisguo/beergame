@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="啤酒分销游戏">
+  <meta name="author" content="Miron Vranjes">
+
+  <title>啤酒分销游戏</title>
+
+  <link rel="stylesheet" href="./bootstrap.min.css" crossorigin="anonymous">
+  <link rel="stylesheet" href="./bootstrap-theme.min.css" crossorigin="anonymous">
+  <link rel="stylesheet" href="animate.css">
+  <link rel="stylesheet" href="style.css">
+
+  <script src="./jquery.min.js"></script>
+  <script src="./bootstrap.min.js" crossorigin="anonymous"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="countUp.js"></script>
+  <script src="validator.js"></script>
+  <script src="client.js"></script>
+</head>
+
+<body>
+
+  <div class="modal fade" id="nextTurn" tabindex="-1" role="dialog">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+          <h4 class="modal-title">欢迎来到第 <span class="weekText">1</span> 周！</h4>
+        </div>
+        <div class="modal-body">
+          <p>您现在进入游戏第 <span class="weekText">1</span> 周。每轮的步骤如下：</p>
+          <ol>
+            <li>接收来自<span class="upstreamName">分销商</span>的<strong>新到货物</strong>。</li>
+            <li>满足<span class="downstreamName">客户</span>的<strong>订单请求</strong>。</li>
+            <li>向<span class="upstreamName">分销商</span>下达<strong>新订单</strong>。</li>
+          </ol>
+          <p>祝您本周顺利！</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-primary" data-dismiss="modal">知道了！</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="myModal" tabindex="-1" role="dialog" data-backdrop="static" data-keyboard="false">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <form role="form" data-toggle="validator">
+          <div class="modal-header">
+            <h4 class="modal-title">请输入您的用户名</h4>
+          </div>
+          <div class="modal-body">
+            <p>请输入一个唯一的用户名，系统将随机分配您到一个团队。</p>
+            <div class="alert alert-danger collapse" role="alert" id="errorDialog">
+              <span class="glyphicon glyphicon-exclamation-sign" aria-hidden="true"></span>
+              <span class="sr-only">错误：</span> <span id="errorText">该用户名已被使用！请选择一个不同的用户名。</span>
+            </div>
+            <div class="form-group has-feedback">
+              <label for="formUsername" class="control-label">用户名</label>
+              <div class="input-group">
+                <span class="input-group-addon">
+        <span class="glyphicon glyphicon-user" aria-hidden="true"></span>
+                </span>
+                <input type="text" pattern="^[_A-z0-9\u4e00-\u9fa5]{2,}$" maxlength="15" class="form-control" id="formUsername" placeholder="用户名" required>
+              </div>
+              <span class="glyphicon form-control-feedback" aria-hidden="true"></span>
+              <div class="help-block with-errors">至少3个字符，支持中文</div>
+            </div>
+          </div>
+          <div class="modal-footer form-group">
+            <button type="submit" class="btn btn-primary" id="btnLogin">开始</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="container">
+
+    <h2>啤酒分销游戏 <small>Beta</small></h2>
+
+    <nav class="navbar navbar-default">
+      <div class="container-fluid">
+        <div class="navbar-header">
+          <div class="navbar-brand" id="role">加载中...</div>
+        </div>
+        <div class="collapse navbar-collapse">
+          <p class="navbar-text navbar-right" id="username"></p>
+        </div>
+      </div>
+    </nav>
+
+    <p id="participants">等待游戏开始...</p>
+
+    <div class="alert alert-warning collapse" role="alert" id="waitingOnUsers">
+      <span class="glyphicon glyphicon-exclamation-sign" aria-hidden="true"></span>
+      <span id="waitingText">您的订单已提交。正在等待其他玩家...</span>
+    </div>
+
+    <div class="alert alert-warning collapse" role="alert" id="acceptDelivery">
+      <span class="glyphicon glyphicon glyphicon-inbox" aria-hidden="true"></span>
+      <span id="deliveryText">您有一个来自分销商的新货物。接受以开始！</span>
+      <p class="pull-right">
+        <a class="btn btn-warning" id="btnDeliver" href="#">接收货物</a>
+      </p>
+    </div>
+
+    <div class="alert alert-success collapse" role="alert" id="fulfillOrder">
+      <span class="glyphicon glyphicon-road" aria-hidden="true"></span>
+      <span id="fulfillText">客户正在等待他们的订单。您需要尽可能满足需求！</span>
+      <p class="pull-right">
+        <a class="btn btn-success" id="btnFulfill" href="#">完成订单</a>
+      </p>
+    </div>
+
+    <div class="alert alert-warning collapse" role="alert" id="newOrder">
+      <span class="glyphicon glyphicon-shopping-cart" aria-hidden="true"></span>
+      <span id="orderText">是时候向分销商订货了。填写下方订单表单来下单。</span>
+    </div>
+
+    <div class="panel panel-default" id="lobby">
+      <div class="panel-heading">团队成员</div>
+
+      <table class="table" id="grouptable">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>用户名</th>
+            <th>角色</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          <tr>
+            <td>1</td>
+            <td>等待中...</td>
+            <td></td>
+          </tr>
+          <tr>
+            <td>2</td>
+            <td>等待中...</td>
+            <td></td>
+          </tr>
+          <tr>
+            <td>3</td>
+            <td>等待中...</td>
+            <td></td>
+          </tr>
+          <tr>
+            <td>4</td>
+            <td>等待中...</td>
+            <td></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="row" id="board">
+      <div class="col-sm-3">
+        <div class="panel panel-success">
+          <div class="panel-heading">
+            <h3 class="panel-title" id="downstreamRole">客户</h3>
+          </div>
+          <div class="panel-body">
+            <div class="row">
+              <div class="col-xs-6">
+                <p><strong>收到订单：</strong></p>
+                <p class="unit-amount" id="downstreamOrders"><span id="dsOrdrAmt">0</span><small>单位</small></p>
+              </div>
+              <div class="col-xs-6">
+                <p><strong>发出货物：</strong></p>
+                <p class="unit-amount" id="downstreamShipments"><span id="dsShpAmt">0</span><small>单位</small></p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-6">
+        <div class="panel panel-primary">
+          <div class="panel-heading">
+            <h3 class="panel-title" id="userRole">零售商（您）</h3>
+          </div>
+          <div class="panel-body">
+            <div class="row">
+              <div class="col-xs-4">
+                <p><strong>成本：</strong></p>
+                <p class="unit-amount-sm" id="curCost">¥<span id="cstAmt">0.00</span></p>
+              </div>
+              <div class="col-xs-4">
+                <p><strong>库存：</strong></p>
+                <p class="unit-amount" id="curInventory"><span id="inventoryAmt">0</span><small>单位</small></p>
+              </div>
+              <div class="col-xs-4">
+                <p><strong>积压：</strong></p>
+                <p class="unit-amount" id="curBacklog"><span id="bklgAmt">0</span><small>单位</small></p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-3">
+        <div class="panel panel-warning">
+          <div class="panel-heading">
+            <h3 class="panel-title" id="upstreamRole">分销商</h3>
+          </div>
+          <div class="panel-body">
+            <p><strong>收到货物：</strong></p>
+            <p class="unit-amount" id="upstreamShipments"><span id="usShpAmt">0</span><small>单位</small></p>
+            <form data-toggle="validator" role="form">
+              <div class="form-group">
+                <div class="input-group">
+                  <input type="text" pattern="^[0-9]+$" data-error="请输入有效数量" class="form-control" id="formOrderAmount" placeholder="数量" required>
+                  <span class="input-group-btn">
+                  <button class="btn btn-warning" type="submit" id="btnOrder">下单</button>
+                </span>
+                </div>
+                <div class="help-block with-errors"></div>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</body>
+
+</html>
