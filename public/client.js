@@ -456,6 +456,10 @@ function hideGameBoard() {
 
 // 游戏开始时的UI设置
 socket.on('game started', function (msg) {
+    curUser = msg.update || curUser;
+    curWeek = msg.week;
+    numUsers = msg.numUsers;
+
     // 更新本地的 waitingForOrders（服务器发来的）
     if (msg.waitingForOrders && curGroup) {
         curGroup.waitingForOrders = msg.waitingForOrders;
@@ -467,9 +471,6 @@ socket.on('game started', function (msg) {
         submittedOrder = false;
     }
     // 直接显示订单表单，不弹窗（第1周无需显示上轮结果）
-    curUser = msg.update || curUser;
-    curWeek = msg.week;
-    numUsers = msg.numUsers;
     updateStatus();
     $('#board').show();
     $('#lobby').hide();

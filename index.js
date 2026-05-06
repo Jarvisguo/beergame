@@ -52,6 +52,12 @@ function groupRoom(group) {
     return String(group);
 }
 
+function ack(callback, payload) {
+    if (typeof callback == "function") {
+        callback(payload);
+    }
+}
+
 // This controls how the roles are labeled
 var BEER_NAMES = ["零售商", "批发商", "区域仓库", "工厂"];
 
@@ -131,7 +137,7 @@ io.on('connection', function (socket) {
             ++numUsers;
             socket.name = user.name;
             addedUser = true;
-            callback({ numUsers: numUsers, idx: user.index, group: groups[user.group], gameEnded: gameEnded });
+            ack(callback, { numUsers: numUsers, idx: user.index, group: groups[user.group], gameEnded: gameEnded });
             socket.join(groupRoom(user.group));
 
             if (!gameStarted && !gameEnded) io.to(groupRoom(user.group)).emit('group member joined', { idx: user.index, update: groups[user.group].users[user.index] });
@@ -143,7 +149,7 @@ io.on('connection', function (socket) {
             io.to("admins").emit('update table', { numUsers: numUsers, groups: groups });
         } else {
             if (gameEnded) {
-                callback("Game Ended");
+                ack(callback, "Game Ended");
             } else {
                 // Check if all groups are full and game has started
                 var allFull = true;
@@ -154,11 +160,11 @@ io.on('connection', function (socket) {
                     }
                 }
                 if (gameStarted && allFull) {
-                    callback("Game Started - All groups are full");
+                    ack(callback, "Game Started - All groups are full");
                 } else if (gameStarted) {
-                    callback("Game Started");
+                    ack(callback, "Game Started");
                 } else {
-                    callback("Invalid Username");
+                    ack(callback, "Invalid Username");
                 }
             }
         }
@@ -201,9 +207,9 @@ io.on('connection', function (socket) {
                 gameStatus = "waiting";
             }
 
-            callback({ status: gameStatus, numUsers: numUsers, groups: groups });
+            ack(callback, { status: gameStatus, numUsers: numUsers, groups: groups });
         } else {
-            callback("Invalid Password");
+            ack(callback, "Invalid Password");
         }
     });
 
@@ -222,7 +228,7 @@ io.on('connection', function (socket) {
     // Admin has kicked this group out
     socket.on('remove group', function (msg, callback) {
         if (msg == "" || msg >= groups.length || msg < 0) {
-            callback("Error");
+            ack(callback, "Error");
         } else {
             var usersToRemove = groups[msg].users.length;
 
@@ -247,14 +253,14 @@ io.on('connection', function (socket) {
                 }
             }
 
-            callback({ numUsers: numUsers, groups: groups });
+            ack(callback, { numUsers: numUsers, groups: groups });
         }
     });
 
     // Admin has started the game
     socket.on('start game', function (callback) {
         if (gameStarted) {
-            return callback({ err: "The game has already begun." });
+            return ack(callback, { err: "The game has already begun." });
         } else {
             // 统计实际在线用户数
             var onlineCount = 0;
@@ -265,13 +271,13 @@ io.on('connection', function (socket) {
             }
             console.log('start game: onlineCount=' + onlineCount + ', groups[0].users.length=' + (groups[0] ? groups[0].users.length : 0));
             if (numUsers == 0) {
-                return callback({ err: "You need at least 4 people to play the game." });
+                return ack(callback, { err: "You need at least 4 people to play the game." });
             } else if (onlineCount < 4) {
-                return callback({ err: "Not enough online players: " + onlineCount });
+                return ack(callback, { err: "Not enough online players: " + onlineCount });
             }
 
             gameStarted = true;
-            callback({ numUsers: numUsers });
+            ack(callback, { numUsers: numUsers });
 
             // 只初始化缓冲区和状态，不处理回合（回合由 submit order 触发）
             for (var i = 0; i < groups.length; i++) {
@@ -312,12 +318,12 @@ io.on('connection', function (socket) {
     // Admin has reset a game already in progress
     socket.on('reset game', function (callback) {
         if (!gameStarted) {
-            callback("Error");
+            ack(callback, "Error");
         } else {
             gameStarted = false;
             gameEnded = false;
             resetGame();
-            callback({ numUsers: numUsers, groups: groups });
+            ack(callback, { numUsers: numUsers, groups: groups });
 
             socket.broadcast.emit('game reset', {
                 numUsers: numUsers,
@@ -329,10 +335,10 @@ io.on('connection', function (socket) {
     // Admin has ended the game
     socket.on('end game', function (callback) {
         if (!gameStarted || gameEnded) {
-            callback("Error");
+            ack(callback, "Error");
         } else {
             gameEnded = true;
-            callback({ numUsers: numUsers, groups: groups });
+            ack(callback, { numUsers: numUsers, groups: groups });
 
             socket.broadcast.emit('game ended', {
                 numUsers: numUsers
@@ -345,18 +351,18 @@ io.on('connection', function (socket) {
         var user = users[socket.name];
         if (!user || user.group === undefined) {
             console.log("submit order ignored: user not registered or no group");
-            return callback({ err: "User not registered in a group" });
+            return ack(callback, { err: "User not registered in a group" });
         }
         var group = groups[user.group];
         if (!group) {
             console.log("submit order ignored: group not found");
-            return callback({ err: "Group not found" });
+            return ack(callback, { err: "Group not found" });
         }
         
         // Check if game has exceeded 50 weeks (no more orders accepted)
         if (group.week >= 50) {
             console.log("submit order ignored: game week " + group.week + " >= 50");
-            return callback({ err: "Game has exceeded 50 weeks. No more orders accepted." });
+            return ack(callback, { err: "Game has exceeded 50 weeks. No more orders accepted." });
         }
 
         console.log("User: " + socket.name);
@@ -375,10 +381,10 @@ io.on('connection', function (socket) {
 
         // Either advance the turn or we're waiting
         if (group.waitingForOrders.length == 0) {
-            callback();
+            ack(callback);
             advanceTurn(user.group);
         } else {
-            callback(group.waitingForOrders);
+            ack(callback, group.waitingForOrders);
             io.to(groupRoom(user.group)).emit('update order wait', group.waitingForOrders);
         }
     });
