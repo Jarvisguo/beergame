@@ -53,6 +53,23 @@
 
     <p id="status">游戏尚未开始。</p>
 
+    <div class="panel panel-default" id="gameSettings">
+      <div class="panel-heading">游戏设置</div>
+      <div class="panel-body">
+        <form class="form-inline">
+          <div class="form-group">
+            <label for="demandTrend">客户需求趋势：</label>
+            <select class="form-control" id="demandTrend">
+              <option value="mixed" selected>混合趋势：4 → 6 → 8 → 10 → 8 → 6 → 4</option>
+              <option value="growth">增长趋势：4 → 6 → 8 → 10 → 12 → 14 → 16</option>
+              <option value="decline">下降趋势：16 → 14 → 12 → 10 → 8 → 6 → 4</option>
+            </select>
+          </div>
+          <p class="help-block" style="margin-bottom:0;">设置只在开始游戏时生效。订单信息延迟 1 周，货物到达延迟 2 周。</p>
+        </form>
+      </div>
+    </div>
+
     <div class="panel panel-default" id="charts">
       <div class="panel-heading">图表</div>
       <div class="panel-body">

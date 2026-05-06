@@ -18,9 +18,33 @@ var userIdx = 0;
 var curGroup;
 var gameEnded = false;
 var maxWeeks = 26;
+var demandTrend = "mixed";
+var demandProfile = null;
+
+var demandTrendLabels = {
+    growth: "增长趋势",
+    decline: "下降趋势",
+    mixed: "混合趋势"
+};
 
 function hasCompletedFinalWeek() {
     return curWeek > maxWeeks;
+}
+
+function formatDemandSchedule(profile) {
+    if (!profile || !profile.schedule) return "等待管理员选择需求趋势。";
+    var start = 1;
+    var parts = [];
+    for (var i = 0; i < profile.schedule.length; i++) {
+        var end = profile.schedule[i].until;
+        parts.push("第" + start + "-" + end + "周：" + profile.schedule[i].demand);
+        start = end + 1;
+    }
+    return (profile.name || demandTrendLabels[demandTrend] || "需求趋势") + "（" + parts.join("，") + "）";
+}
+
+function updateRulesPanel() {
+    $('#demandTrendText').text(formatDemandSchedule(demandProfile));
 }
 
 var countOptions = {
@@ -57,12 +81,15 @@ $(document).ready(function () {
                 curWeek = msg.group.week;
                 numUsers = msg.numUsers;
                 gameEnded = msg.gameEnded;
+                demandTrend = msg.demandTrend || msg.group.demandTrend || demandTrend;
+                demandProfile = msg.demandProfile || msg.group.demandProfile || demandProfile;
 
                 $('#formUsername').val('');
                 $('#errorDialog').hide();
                 $('#myModal').modal('hide');
                 $('#role').text('您的角色：' + curUser.role.name);
                 $('#username').text('已登录：' + curUser.name);
+                updateRulesPanel();
 
                 if (curWeek > 0 && !gameEnded) {
                     nextTurn(numUsers, curWeek, curUser);
@@ -317,6 +344,9 @@ function resetUser() {
     userIdx = 0;
     curGroup = null;
     gameEnded = false;
+    demandTrend = "mixed";
+    demandProfile = null;
+    updateRulesPanel();
 
     $('#grouptable > tbody > tr').each(function (i) {
         $(this).removeClass("danger");
@@ -473,6 +503,9 @@ socket.on('game started', function (msg) {
     curUser = msg.update || curUser;
     curWeek = msg.week;
     numUsers = msg.numUsers;
+    demandTrend = msg.demandTrend || demandTrend;
+    demandProfile = msg.demandProfile || demandProfile;
+    updateRulesPanel();
 
     // 更新本地的 waitingForOrders（服务器发来的）
     if (msg.waitingForOrders && curGroup) {

@@ -46,7 +46,46 @@ var backlog_cost = 1;
 var starting_inventory = 12;
 var starting_throughput = 4;
 var max_weeks = 26;
-var customer_demand = [4, 8, 12, 16, 20];
+var default_demand_trend = "mixed";
+var current_demand_trend = default_demand_trend;
+var demand_profiles = {
+    growth: {
+        name: "增长趋势",
+        schedule: [
+            { until: 4, demand: 4 },
+            { until: 8, demand: 6 },
+            { until: 12, demand: 8 },
+            { until: 16, demand: 10 },
+            { until: 20, demand: 12 },
+            { until: 24, demand: 14 },
+            { until: 26, demand: 16 }
+        ]
+    },
+    decline: {
+        name: "下降趋势",
+        schedule: [
+            { until: 4, demand: 16 },
+            { until: 8, demand: 14 },
+            { until: 12, demand: 12 },
+            { until: 16, demand: 10 },
+            { until: 20, demand: 8 },
+            { until: 24, demand: 6 },
+            { until: 26, demand: 4 }
+        ]
+    },
+    mixed: {
+        name: "混合趋势",
+        schedule: [
+            { until: 4, demand: 4 },
+            { until: 8, demand: 6 },
+            { until: 12, demand: 8 },
+            { until: 16, demand: 10 },
+            { until: 20, demand: 8 },
+            { until: 24, demand: 6 },
+            { until: 26, demand: 4 }
+        ]
+    }
+};
 var admin_password = process.env.ADMIN_PASSWORD || "admin";
 var reconnect_grace_ms = parseInt(process.env.MOBILE_RECONNECT_GRACE_MS || "300000", 10);
 if (isNaN(reconnect_grace_ms) || reconnect_grace_ms < 0) reconnect_grace_ms = 300000;
@@ -59,6 +98,18 @@ function ack(callback, payload) {
     if (typeof callback == "function") {
         callback(payload);
     }
+}
+
+function normalizeDemandTrend(trend) {
+    return demand_profiles[trend] ? trend : default_demand_trend;
+}
+
+function customerDemandForWeek(week, trend) {
+    var profile = demand_profiles[normalizeDemandTrend(trend)];
+    for (var i = 0; i < profile.schedule.length; i++) {
+        if (week <= profile.schedule[i].until) return profile.schedule[i].demand;
+    }
+    return profile.schedule[profile.schedule.length - 1].demand;
 }
 
 function clearDisconnectTimer(user) {
@@ -175,7 +226,14 @@ io.on('connection', function (socket) {
             if (!reconnectingDuringGrace) ++numUsers;
             socket.name = user.name;
             addedUser = true;
-            ack(callback, { numUsers: numUsers, idx: user.index, group: groups[user.group], gameEnded: gameEnded });
+        ack(callback, {
+            numUsers: numUsers,
+            idx: user.index,
+            group: groups[user.group],
+            gameEnded: gameEnded,
+            demandTrend: groups[user.group].demandTrend || current_demand_trend,
+            demandProfile: groups[user.group].demandProfile || demand_profiles[current_demand_trend]
+        });
             socket.join(groupRoom(user.group));
 
             if (!gameStarted && !gameEnded) io.to(groupRoom(user.group)).emit('group member joined', { idx: user.index, update: groups[user.group].users[user.index] });
@@ -238,7 +296,13 @@ io.on('connection', function (socket) {
                 gameStatus = "waiting";
             }
 
-            ack(callback, { status: gameStatus, numUsers: numUsers, groups: groups });
+            ack(callback, {
+                status: gameStatus,
+                numUsers: numUsers,
+                groups: groups,
+                demandTrend: current_demand_trend,
+                demandProfile: demand_profiles[current_demand_trend]
+            });
         } else {
             ack(callback, "Invalid Password");
         }
@@ -290,10 +354,15 @@ io.on('connection', function (socket) {
     });
 
     // Admin has started the game
-    socket.on('start game', function (callback) {
+    socket.on('start game', function (options, callback) {
+        if (typeof options == "function") {
+            callback = options;
+            options = {};
+        }
         if (gameStarted) {
             return ack(callback, { err: "The game has already begun." });
         } else {
+            var selectedDemandTrend = normalizeDemandTrend(options && options.demandTrend);
             // 统计实际在线用户数
             var onlineCount = 0;
             var incompleteGroups = [];
@@ -317,7 +386,12 @@ io.on('connection', function (socket) {
             }
 
             gameStarted = true;
-            ack(callback, { numUsers: numUsers });
+            current_demand_trend = selectedDemandTrend;
+            ack(callback, {
+                numUsers: numUsers,
+                demandTrend: current_demand_trend,
+                demandProfile: demand_profiles[current_demand_trend]
+            });
 
             // 只初始化缓冲区和状态，不处理回合（回合由 submit order 触发）
             for (var i = 0; i < groups.length; i++) {
@@ -327,6 +401,8 @@ io.on('connection', function (socket) {
                 g.users = g.users.filter(function(u) { return u.socketId || u.disconnectedAt; });
 
                 g.waitingForOrders = JSON.parse(JSON.stringify(BEER_NAMES));
+                g.demandTrend = current_demand_trend;
+                g.demandProfile = demand_profiles[current_demand_trend];
                 g.shipping = [];
                 g.mailing = [];
                 g.costHistory = [];
@@ -349,7 +425,9 @@ io.on('connection', function (socket) {
                 io.to(groupRoom(i)).emit('game started', {
                     numUsers: numUsers,
                     week: 1,  // 直接从第1周开始（初始化已完成）
-                    waitingForOrders: g.waitingForOrders
+                    waitingForOrders: g.waitingForOrders,
+                    demandTrend: g.demandTrend,
+                    demandProfile: g.demandProfile
                 });
             }
         }
@@ -362,6 +440,7 @@ io.on('connection', function (socket) {
         } else {
             gameStarted = false;
             gameEnded = false;
+            current_demand_trend = default_demand_trend;
             resetGame();
             ack(callback, { numUsers: numUsers, groups: groups });
 
@@ -486,17 +565,7 @@ function advanceTurn(group) {
 
         // If start, get order from customer directly
         if (i == 0) {
-            if (groupToAdvance.week < 8) {
-                curUser.role.downstream.orders = customer_demand[0];
-            } else if (groupToAdvance.week < 19) {
-                curUser.role.downstream.orders = customer_demand[1];
-            } else if (groupToAdvance.week < 26) {
-                curUser.role.downstream.orders = customer_demand[2];
-            } else if (groupToAdvance.week < 39) {
-                curUser.role.downstream.orders = customer_demand[3];
-            } else {
-                curUser.role.downstream.orders = customer_demand[4];
-            }
+            curUser.role.downstream.orders = customerDemandForWeek(groupToAdvance.week, groupToAdvance.demandTrend || current_demand_trend);
             console.log("[" + curUser.role.name + "] " + " Customer Order >>>: " + curUser.role.downstream.orders);
         } else {
             // Otherwise the order is from the previous node

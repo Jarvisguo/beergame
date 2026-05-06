@@ -5,6 +5,7 @@ const vm = require('vm');
 const textUpdates = {};
 const appended = {};
 const handlers = {};
+const values = {};
 const api = {
   hide() { return this; },
   show() { return this; },
@@ -20,7 +21,13 @@ const api = {
   click() { return this; },
   on() { return this; },
   modal() { return this; },
-  val() { return '0'; },
+  val(value) {
+    if (value !== undefined) {
+      values[this.selector] = value;
+      return this;
+    }
+    return values[this.selector] || '0';
+  },
   attr() { return this; },
   addClass() { return this; },
   removeClass() { return this; },
@@ -93,14 +100,15 @@ const groups = [{
 }];
 
 context.gameGroup = groups;
+context.demandTrend = 'mixed';
 context.startGame(4);
-assert.strictEqual(textUpdates['#status'], '游戏已开始。当前有 4 名参与者。');
+assert.strictEqual(textUpdates['#status'], '游戏已开始，共有 4 名参与者。 客户需求：混合趋势。');
 assert(appended['#group0'].includes('<td>46</td>'), 'admin table should show total inventory');
 assert(appended['#group0'].includes('<td>10</td>'), 'admin table should show total backlog');
 assert(appended['#group0'].includes('<td>批发商、工厂</td>'), 'admin table should show waiting roles');
 
 handlers['update table']({ numUsers: 3, groups });
-assert.strictEqual(textUpdates['#status'], '游戏已开始。当前有 3 名参与者。');
+assert.strictEqual(textUpdates['#status'], '游戏已开始，共有 3 名参与者。 客户需求：混合趋势。');
 
 context.drawChart(0, 'Orders');
 assert.strictEqual(JSON.stringify(context.__lastDataTable.rows), JSON.stringify([

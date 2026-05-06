@@ -311,6 +311,41 @@ async function assertWeekLimitStopsOrdersAt26() {
   }
 }
 
+async function assertDemandTrendSelection(trend, rounds, expectedDemand) {
+  const admin = await connectClient();
+  const players = [];
+  try {
+    for (let i = 0; i < 4; i++) {
+      players.push(await connectClient());
+      await emit(players[i], 'submit username', `${trend}-${i + 1}`);
+    }
+
+    await emit(admin, 'submit password', ADMIN_PASSWORD);
+    const startedEvents = players.map((socket) => once(socket, 'game started'));
+    const startResponse = await emit(admin, 'start game', { demandTrend: trend });
+    assert.strictEqual(startResponse.demandTrend, trend);
+    const started = await Promise.all(startedEvents);
+    started.forEach((msg) => {
+      assert.strictEqual(msg.demandTrend, trend);
+      assert.strictEqual(msg.demandProfile.name.length > 0, true);
+    });
+
+    let turns = [];
+    for (let round = 1; round <= rounds; round++) {
+      const nextTurnEvents = players.map((socket) => once(socket, 'next turn'));
+      for (let i = 0; i < players.length; i++) {
+        await emit(players[i], 'submit order', 4);
+      }
+      turns = await Promise.all(nextTurnEvents);
+    }
+
+    assert.strictEqual(turns[0].update.role.downstream.orders, expectedDemand, `${trend} demand at round ${rounds}`);
+  } finally {
+    admin.close();
+    players.forEach((socket) => socket && socket.close());
+  }
+}
+
 async function main() {
   const server = spawn(process.execPath, ['index.js'], {
     cwd: process.cwd(),
@@ -347,6 +382,9 @@ async function main() {
     await runIsolated(assertGraceAllowsStart);
     await runIsolated(assertNoAckCrash);
     await runIsolated(assertWeekLimitStopsOrdersAt26);
+    await runIsolated(() => assertDemandTrendSelection('growth', 5, 6));
+    await runIsolated(() => assertDemandTrendSelection('decline', 1, 16));
+    await runIsolated(() => assertDemandTrendSelection('mixed', 17, 8));
   } catch (err) {
     console.error(output);
     throw err;

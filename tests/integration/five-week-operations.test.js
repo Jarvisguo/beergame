@@ -15,6 +15,15 @@ const ORDERS = [
   [6, 3, 12, 8],
   [5, 9, 4, 10]
 ];
+const MIXED_DEMAND = [
+  { until: 4, demand: 4 },
+  { until: 8, demand: 6 },
+  { until: 12, demand: 8 },
+  { until: 16, demand: 10 },
+  { until: 20, demand: 8 },
+  { until: 24, demand: 6 },
+  { until: 26, demand: 4 }
+];
 
 function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -50,6 +59,13 @@ function connectClient() {
     socket.once('connect', () => resolve(socket));
     socket.once('connect_error', reject);
   });
+}
+
+function customerDemandForWeek(week) {
+  for (const entry of MIXED_DEMAND) {
+    if (week <= entry.until) return entry.demand;
+  }
+  return MIXED_DEMAND[MIXED_DEMAND.length - 1].demand;
 }
 
 function emit(socket, event, ...args) {
@@ -112,7 +128,7 @@ function simulateExpected() {
       user.inventory += user.role.upstream.shipments;
 
       if (i === 0) {
-        user.role.downstream.orders = 4;
+        user.role.downstream.orders = customerDemandForWeek(group.week);
       } else {
         user.role.downstream.orders = group.mailing[i - 1].shift();
       }

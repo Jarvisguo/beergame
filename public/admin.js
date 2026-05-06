@@ -17,12 +17,32 @@ var gameGroup;
 var adminGameStarted = false;
 var adminGameEnded = false;
 var maxWeeks = 26;
+var demandTrend = "mixed";
+
+var demandTrendLabels = {
+    growth: "增长趋势",
+    decline: "下降趋势",
+    mixed: "混合趋势"
+};
 
 function formatGroupWeek(group) {
     var week = group.week || 0;
     var completedWeeks = Math.max(0, Math.min(week - 1, maxWeeks));
     if (week > maxWeeks) return "已完成 " + completedWeeks + " 轮";
     return "已完成 " + completedWeeks + " 轮，当前第 " + week + " 周";
+}
+
+function formatParticipantCount(numUsers) {
+    return numUsers == 1 ? "1 名参与者。" : numUsers + " 名参与者。";
+}
+
+function updateAdminStatus(numUsers, gameStarted) {
+    if (gameStarted) {
+        var statusPrefix = adminGameEnded ? '游戏已结束，共有 ' : '游戏已开始，共有 ';
+        $('#status').text(statusPrefix + formatParticipantCount(numUsers) + ' 客户需求：' + (demandTrendLabels[demandTrend] || demandTrendLabels.mixed) + '。');
+    } else {
+        $('#status').text('游戏尚未开始。当前有 ' + numUsers + ' 名参与者。');
+    }
 }
 
 google.charts.load('current', { packages: ['corechart'] });
@@ -45,6 +65,8 @@ $(document).ready(function () {
                 $('#myModal').modal('hide');
                 $('#groupRank').text("团队 #");
                 gameGroup = msg.groups;
+                demandTrend = msg.demandTrend || demandTrend;
+                $('#demandTrend').val(demandTrend);
                 window.gameGroup = gameGroup;
                 try { sessionStorage.setItem('beerGameGroup', JSON.stringify(gameGroup)); } catch(e) {}
                 $('#grouppanel').show();
@@ -68,11 +90,14 @@ $(document).ready(function () {
     $("#btnStartGame").click(function () {
         $('#gameStartError').hide();
 
-        socket.emit('start game', function (msg) {
+        demandTrend = $('#demandTrend').val() || "mixed";
+        socket.emit('start game', { demandTrend: demandTrend }, function (msg) {
             if (msg.err) {
                 $('#errorText').text('无法开始游戏。' + msg.err);
                 $('#gameStartError').show();
             } else {
+                demandTrend = msg.demandTrend || demandTrend;
+                $('#demandTrend').val(demandTrend);
                 $('#groupRank').text("团队 #");
                 startGame(msg.numUsers);
             }
@@ -85,6 +110,7 @@ $(document).ready(function () {
         $('#btnEndGame').hide();
         $('#btnResetGame').hide();
         $('#charts').hide();
+        $('#gameSettings').show();
 
         socket.emit('reset game', function (msg) {
             if (msg == "Error") {
@@ -93,6 +119,8 @@ $(document).ready(function () {
             } else {
                 adminGameStarted = false;
                 adminGameEnded = false;
+                demandTrend = msg.demandTrend || "mixed";
+                $('#demandTrend').val(demandTrend);
                 gameGroup = msg.groups;
                 window.gameGroup = gameGroup;
                 try { sessionStorage.setItem('beerGameGroup', JSON.stringify(gameGroup)); } catch(e) {}
@@ -173,17 +201,10 @@ socket.on('update group', function (msg) {
 function startGame(numUsers) {
     adminGameStarted = true;
     adminGameEnded = false;
+    $('#gameSettings').hide();
     $('#btnStartGame').hide();
     $('#btnEndGame').show();
     $('#btnResetGame').show();
-    if (numUsers == 1) {
-        var numParticipants = "1 名参与者。";
-    } else {
-        var numParticipants = numUsers + ' 名参与者。';
-    }
-
-    $('#status').text('游戏已开始，共有 ' + numParticipants);
-
     refreshTable(gameGroup, numUsers, true);
     showChart();
 }
@@ -193,6 +214,7 @@ function rankGroups(numUsers) {
     adminGameStarted = true;
     adminGameEnded = true;
     $('#groupRank').text("排名");
+    $('#gameSettings').hide();
     var lowestWeek = gameGroup[gameGroup.length - 1].week;
     for (var i = 0; i < gameGroup.length; i++) {
         if (gameGroup[i].week < lowestWeek) lowestWeek = gameGroup[i].week;
@@ -265,18 +287,7 @@ function refreshTable(groups, numUsers, gameStarted) {
     window.gameGroup = gameGroup;
                 try { sessionStorage.setItem('beerGameGroup', JSON.stringify(gameGroup)); } catch(e) {}
 
-    if (numUsers == 1) {
-        var numParticipants = "当前有 1 名参与者。";
-    } else {
-        var numParticipants = '当前有 ' + numUsers + ' 名参与者。';
-    }
-
-    if (gameStarted) {
-        var statusPrefix = adminGameEnded ? '游戏已结束。' : '游戏已开始。';
-        $('#status').text(statusPrefix + numParticipants);
-    } else {
-        $('#status').text('游戏尚未开始。' + numParticipants);
-    }
+    updateAdminStatus(numUsers, gameStarted);
 }
 
 // 图表详情
