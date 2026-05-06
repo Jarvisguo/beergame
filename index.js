@@ -47,6 +47,8 @@ var starting_inventory = 12;
 var starting_throughput = 4;
 var customer_demand = [4, 8, 12, 16, 20];
 var admin_password = process.env.ADMIN_PASSWORD || "admin";
+var reconnect_grace_ms = parseInt(process.env.MOBILE_RECONNECT_GRACE_MS || "300000", 10);
+if (isNaN(reconnect_grace_ms) || reconnect_grace_ms < 0) reconnect_grace_ms = 300000;
 
 function groupRoom(group) {
     return String(group);
@@ -56,6 +58,40 @@ function ack(callback, payload) {
     if (typeof callback == "function") {
         callback(payload);
     }
+}
+
+function clearDisconnectTimer(user) {
+    if (user && user.disconnectTimer) {
+        clearTimeout(user.disconnectTimer);
+        delete user.disconnectTimer;
+    }
+}
+
+function finalizeDisconnect(userName) {
+    var user = users[userName];
+    if (!user || !user.disconnectedAt) return;
+
+    var group = groups[user.group];
+    if (!group || !group.users[user.index]) return;
+
+    clearDisconnectTimer(user);
+    delete user.disconnectedAt;
+    delete user.socketId;
+    delete group.users[user.index].socketId;
+    delete group.users[user.index].disconnectedAt;
+
+    if (numUsers > 0) --numUsers;
+
+    if (!gameStarted) io.to(groupRoom(user.group)).emit('group member left', {
+        idx: user.index,
+        update: group.users[user.index]
+    });
+
+    io.emit('user left', {
+        username: userName,
+        numUsers: numUsers
+    });
+    io.to("admins").emit('update table', { numUsers: numUsers, groups: groups });
 }
 
 // This controls how the roles are labeled
@@ -131,10 +167,11 @@ io.on('connection', function (socket) {
         if (addedUser) return;
 
         console.log(socket.id + ": " + msg);
+        var reconnectingDuringGrace = users[msg] && users[msg].disconnectedAt;
         var user = registerUser(socket.id, msg);
 
         if (user) {
-            ++numUsers;
+            if (!reconnectingDuringGrace) ++numUsers;
             socket.name = user.name;
             addedUser = true;
             ack(callback, { numUsers: numUsers, idx: user.index, group: groups[user.group], gameEnded: gameEnded });
@@ -175,21 +212,14 @@ io.on('connection', function (socket) {
         console.log('Got disconnected!');
         if (addedUser) {
             var user = users[socket.name];
-            if (user.socketId) delete users[socket.name].socketId;
-            delete groups[user.group].users[user.index].socketId;
+            if (!user || user.socketId != socket.id) return;
 
-            --numUsers;
-
-            if (!gameStarted) io.to(groupRoom(user.group)).emit('group member left', {
-                idx: user.index,
-                update: groups[user.group].users[user.index]
-            });
-
-            socket.broadcast.emit('user left', {
-                username: socket.name,
-                numUsers: numUsers
-            });
-            io.to("admins").emit('update table', { numUsers: numUsers, groups: groups });
+            user.disconnectedAt = Date.now();
+            groups[user.group].users[user.index].disconnectedAt = user.disconnectedAt;
+            clearDisconnectTimer(user);
+            user.disconnectTimer = setTimeout(function () {
+                finalizeDisconnect(socket.name);
+            }, reconnect_grace_ms);
         }
     });
 
@@ -236,6 +266,7 @@ io.on('connection', function (socket) {
             for (var i = 0; i < groups[msg].users.length; i++) {
                 var username = groups[msg].users[i].name;
                 console.log("Deleting: " + username);
+                clearDisconnectTimer(users[username]);
                 delete users[username];
             }
             groups.splice(msg, 1);
@@ -268,7 +299,7 @@ io.on('connection', function (socket) {
             for (var si = 0; si < groups.length; si++) {
                 var groupOnlineCount = 0;
                 for (var ui = 0; ui < groups[si].users.length; ui++) {
-                    if (groups[si].users[ui].socketId) {
+                    if (groups[si].users[ui].socketId || groups[si].users[ui].disconnectedAt) {
                         onlineCount++;
                         groupOnlineCount++;
                     }
@@ -292,7 +323,7 @@ io.on('connection', function (socket) {
                 var g = groups[i];
                 // 清理旧用户（socketId 为空的已断开用户），只保留当前在线用户
                 var oldLen = g.users.length;
-                g.users = g.users.filter(function(u) { return u.socketId; });
+                g.users = g.users.filter(function(u) { return u.socketId || u.disconnectedAt; });
 
                 g.waitingForOrders = JSON.parse(JSON.stringify(BEER_NAMES));
                 g.shipping = [];
@@ -526,6 +557,8 @@ function advanceTurn(group) {
 
     // Message to each user
     for (var i = 0; i < groupToAdvance.users.length; i++) {
+        if (!groupToAdvance.users[i].socketId) continue;
+
         // Time to let the person know
         io.to(groupToAdvance.users[i].socketId).emit('next turn', {
             numUsers: numUsers,
@@ -562,10 +595,13 @@ function registerUser(socketId, userName) {
     // Does the user already exist? If so, verify it's a disconnect
     if (users[userName]) {
         var user = users[userName];
-        if (user.socketId) return null;
+        if (user.socketId && !user.disconnectedAt) return null;
 
+        clearDisconnectTimer(user);
         groups[user.group].users[user.index].socketId = socketId;
+        delete groups[user.group].users[user.index].disconnectedAt;
         user.socketId = socketId;
+        delete user.disconnectedAt;
         return users[userName];
     }
 

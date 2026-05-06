@@ -6,6 +6,7 @@ const { io } = require('socket.io-client');
 const PORT = Number(process.env.TEST_PORT || 3210);
 const BASE_URL = `http://127.0.0.1:${PORT}`;
 const ADMIN_PASSWORD = 'test-secret';
+const RECONNECT_GRACE_MS = 700;
 const EXPECTED_ROLES = ['零售商', '批发商', '区域仓库', '工厂'];
 
 function wait(ms) {
@@ -161,7 +162,11 @@ async function runFullGameFlow() {
     });
 
     players[2].close();
-    await wait(300);
+    await wait(100);
+    const adminSnapshot = await emit(admin, 'submit password', ADMIN_PASSWORD);
+    assert.strictEqual(adminSnapshot.numUsers, 4, 'disconnect grace should keep player counted');
+    assert(adminSnapshot.groups[0].users[2].socketId, 'socketId should remain during grace');
+
     const reconnect = await connectClient();
     players[2] = reconnect;
     const rejoined = await emit(reconnect, 'submit username', 'player-3');
@@ -189,6 +194,79 @@ async function runFullGameFlow() {
   }
 }
 
+async function assertDifferentUsernameCannotTakeGraceSeat() {
+  const players = [];
+  try {
+    for (let i = 0; i < 4; i++) {
+      players.push(await connectClient());
+      await emit(players[i], 'submit username', `reserved-${i + 1}`);
+    }
+
+    players[2].close();
+    await wait(100);
+
+    const replacement = await connectClient();
+    players.push(replacement);
+    const replacementJoin = await emit(replacement, 'submit username', 'reserved-replacement');
+    assert.strictEqual(replacementJoin.group.users[0].name, 'reserved-replacement');
+    assert.strictEqual(replacementJoin.idx, 0, 'different usernames should start a new group');
+    assert.strictEqual(replacementJoin.group.users[0].role.name, '零售商');
+
+    const reconnect = await connectClient();
+    players.push(reconnect);
+    const rejoined = await emit(reconnect, 'submit username', 'reserved-3');
+    assert.strictEqual(rejoined.idx, 2);
+    assert.strictEqual(rejoined.group.users[2].role.name, '区域仓库');
+  } finally {
+    players.forEach((socket) => socket && socket.close());
+  }
+}
+
+async function assertDisconnectExpiresAfterGrace() {
+  const admin = await connectClient();
+  const players = [];
+  try {
+    for (let i = 0; i < 4; i++) {
+      players.push(await connectClient());
+      await emit(players[i], 'submit username', `expire-${i + 1}`);
+    }
+
+    await emit(admin, 'submit password', ADMIN_PASSWORD);
+    players[1].close();
+    await wait(RECONNECT_GRACE_MS + 250);
+
+    const afterExpiry = await emit(admin, 'submit password', ADMIN_PASSWORD);
+    assert.strictEqual(afterExpiry.numUsers, 3, 'expired disconnect should reduce online count');
+    assert.strictEqual(afterExpiry.groups[0].users[1].socketId, undefined);
+  } finally {
+    admin.close();
+    players.forEach((socket) => socket && socket.close());
+  }
+}
+
+async function assertGraceAllowsStart() {
+  const admin = await connectClient();
+  const players = [];
+  try {
+    for (let i = 0; i < 4; i++) {
+      players.push(await connectClient());
+      await emit(players[i], 'submit username', `grace-start-${i + 1}`);
+    }
+
+    await emit(admin, 'submit password', ADMIN_PASSWORD);
+    const startedEvents = players.slice(0, 3).map((socket) => once(socket, 'game started'));
+    players[3].close();
+    await wait(100);
+
+    const start = await emit(admin, 'start game');
+    assert.strictEqual(start.numUsers, 4, 'grace-period disconnect should count as online');
+    await Promise.all(startedEvents);
+  } finally {
+    admin.close();
+    players.forEach((socket) => socket && socket.close());
+  }
+}
+
 async function assertNoAckCrash() {
   const admin = await connectClient();
   try {
@@ -207,7 +285,8 @@ async function main() {
     env: {
       ...process.env,
       PORT: String(PORT),
-      ADMIN_PASSWORD
+      ADMIN_PASSWORD,
+      MOBILE_RECONNECT_GRACE_MS: String(RECONNECT_GRACE_MS)
     },
     stdio: ['ignore', 'pipe', 'pipe']
   });
@@ -231,6 +310,9 @@ async function main() {
     await runIsolated(assertStartGuard);
     await runIsolated(assertIncompleteGroupCannotStart);
     await runIsolated(runFullGameFlow);
+    await runIsolated(assertDifferentUsernameCannotTakeGraceSeat);
+    await runIsolated(assertDisconnectExpiresAfterGrace);
+    await runIsolated(assertGraceAllowsStart);
     await runIsolated(assertNoAckCrash);
   } catch (err) {
     console.error(output);
@@ -246,7 +328,8 @@ async function runIsolated(testFn) {
     env: {
       ...process.env,
       PORT: String(PORT),
-      ADMIN_PASSWORD
+      ADMIN_PASSWORD,
+      MOBILE_RECONNECT_GRACE_MS: String(RECONNECT_GRACE_MS)
     },
     stdio: ['ignore', 'pipe', 'pipe']
   });
