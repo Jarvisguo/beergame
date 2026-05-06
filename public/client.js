@@ -336,6 +336,24 @@ function updateStatus() {
     }
 }
 
+function updateBoard() {
+    if (!curUser || !curUser.role) return;
+
+    $('#downstreamRole').text(curUser.role.downstream.name);
+    $('#upstreamRole').text(curUser.role.upstream.name);
+    $('#userRole').text(curUser.role.name + '（您）');
+
+    $('#dsOrdrAmt').text(curUser.role.downstream.orders || 0);
+    $('#dsShpAmt').text(curUser.role.downstream.shipments || 0);
+    $('#usShpAmt').text(curUser.role.upstream.shipments || 0);
+    $('#cstAmt').text((curUser.cost || 0).toFixed(2));
+    $('#inventoryAmt').text(curUser.inventory || 0);
+    $('#bklgAmt').text(curUser.backlog || 0);
+
+    $("span.upstreamName").text(curUser.role.upstream.name);
+    $("span.downstreamName").text(curUser.role.downstream.name);
+}
+
 // 下一轮（第几周）逻辑
 function nextTurn(users, week, user) {
     curUser = user;
@@ -344,23 +362,10 @@ function nextTurn(users, week, user) {
 
     updateStatus();
     updateAnalytics();  // 更新实时数据分析面板
-
-    $('#downstreamRole').text(curUser.role.downstream.name);
-    $('#upstreamRole').text(curUser.role.upstream.name);
-    $('#userRole').text(curUser.role.name + '（您）');
-
-    // 更新核心数据
-    $('#dsOrdrAmt').text(curUser.role.downstream.orders || 0);
-    $('#dsShpAmt').text(curUser.role.downstream.shipments || 0);
-    $('#usShpAmt').text(curUser.role.upstream.shipments || 0);
-    $('#cstAmt').text((curUser.cost || 0).toFixed(2));
-    $('#inventoryAmt').text(curUser.inventory || 0);
-    $('#bklgAmt').text(curUser.backlog || 0);
+    updateBoard();
 
     // nextTurn 更新页面数据（不再弹窗）
     $("span.weekText").text("第 " + week + " 周");
-    $("span.upstreamName").text(curUser.role.upstream.name);
-    $("span.downstreamName").text(curUser.role.downstream.name);
 }
 
 // 更新实时数据分析面板
@@ -472,6 +477,7 @@ socket.on('game started', function (msg) {
     }
     // 直接显示订单表单，不弹窗（第1周无需显示上轮结果）
     updateStatus();
+    updateBoard();
     $('#board').show();
     $('#lobby').hide();
     $('#newOrder').fadeIn('fast');
