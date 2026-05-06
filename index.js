@@ -264,16 +264,24 @@ io.on('connection', function (socket) {
         } else {
             // 统计实际在线用户数
             var onlineCount = 0;
+            var incompleteGroups = [];
             for (var si = 0; si < groups.length; si++) {
+                var groupOnlineCount = 0;
                 for (var ui = 0; ui < groups[si].users.length; ui++) {
-                    if (groups[si].users[ui].socketId) onlineCount++;
+                    if (groups[si].users[ui].socketId) {
+                        onlineCount++;
+                        groupOnlineCount++;
+                    }
+                }
+                if (groups[si].users.length != 4 || groupOnlineCount != 4) {
+                    incompleteGroups.push(si + 1);
                 }
             }
             console.log('start game: onlineCount=' + onlineCount + ', groups[0].users.length=' + (groups[0] ? groups[0].users.length : 0));
             if (numUsers == 0) {
                 return ack(callback, { err: "You need at least 4 people to play the game." });
-            } else if (onlineCount < 4) {
-                return ack(callback, { err: "Not enough online players: " + onlineCount });
+            } else if (incompleteGroups.length > 0) {
+                return ack(callback, { err: "Every group must have 4 online players. Incomplete groups: " + incompleteGroups.join(", ") });
             }
 
             gameStarted = true;
@@ -592,9 +600,8 @@ function registerUser(socketId, userName) {
     if (assignedGroup >= 0) {
         userRole = JSON.parse(JSON.stringify(BEER_ROLES[assignedIndex]));
     } else {
-        // All groups are full or have all roles taken, create new group
-        if (roles.length == 0) roles = JSON.parse(JSON.stringify(BEER_ROLES));
-        userRole = roles.shift();
+        // All groups are full or have all roles taken, create a new group from the first role.
+        userRole = JSON.parse(JSON.stringify(BEER_ROLES[0]));
     }
 
     // Assign them to a group

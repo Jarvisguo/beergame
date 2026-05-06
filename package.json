@@ -4,7 +4,7 @@
   "description": "Beer Distribution Game Simulator",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node tests/integration/socket-flow.test.js",
     "start": "node index.js"
   },
   "engines": {
