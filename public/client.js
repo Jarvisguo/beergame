@@ -349,7 +349,13 @@ function nextTurn(users, week, user) {
     $('#upstreamRole').text(curUser.role.upstream.name);
     $('#userRole').text(curUser.role.name + '（您）');
 
-    $('#dsShpAmt').text('0');
+    // 更新核心数据
+    $('#dsOrdrAmt').text(curUser.role.downstream.orders || 0);
+    $('#dsShpAmt').text(curUser.role.downstream.shipments || 0);
+    $('#usShpAmt').text(curUser.role.upstream.shipments || 0);
+    $('#cstAmt').text((curUser.cost || 0).toFixed(2));
+    $('#inventoryAmt').text(curUser.inventory || 0);
+    $('#bklgAmt').text(curUser.backlog || 0);
 
     // nextTurn 更新页面数据（不再弹窗）
     $("span.weekText").text("第 " + week + " 周");
