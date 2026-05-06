@@ -4,7 +4,7 @@
   "description": "Beer Distribution Game Simulator",
   "main": "index.js",
   "scripts": {
-    "test": "node tests/unit/client-board.test.js && node tests/unit/admin-status.test.js && node tests/integration/socket-flow.test.js",
+    "test": "node tests/unit/client-board.test.js && node tests/unit/admin-status.test.js && node tests/integration/socket-flow.test.js && node tests/integration/five-week-operations.test.js",
     "start": "node index.js"
   },
   "engines": {
