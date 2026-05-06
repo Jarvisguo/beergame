@@ -14,6 +14,8 @@ var chart;
 // Expose gameGroup globally so report.html can access it
 window.gameGroup = undefined;
 var gameGroup;
+var adminGameStarted = false;
+var adminGameEnded = false;
 
 google.charts.load('current', { packages: ['corechart'] });
 
@@ -37,7 +39,6 @@ $(document).ready(function () {
                 gameGroup = msg.groups;
                 window.gameGroup = gameGroup;
                 try { sessionStorage.setItem('beerGameGroup', JSON.stringify(gameGroup)); } catch(e) {}
-                refreshTable(gameGroup, msg.numUsers, false);
                 $('#grouppanel').show();
 
                 if (msg.status == "started") {
@@ -46,6 +47,10 @@ $(document).ready(function () {
                     startGame(msg.numUsers);
                     $('#btnEndGame').hide();
                     rankGroups(msg.numUsers);
+                } else {
+                    adminGameStarted = false;
+                    adminGameEnded = false;
+                    refreshTable(gameGroup, msg.numUsers, false);
                 }
             }
         });
@@ -78,6 +83,8 @@ $(document).ready(function () {
                 $('#errorText').text('游戏无法重新开始。');
                 $('#gameStartError').show();
             } else {
+                adminGameStarted = false;
+                adminGameEnded = false;
                 gameGroup = msg.groups;
                 window.gameGroup = gameGroup;
                 try { sessionStorage.setItem('beerGameGroup', JSON.stringify(gameGroup)); } catch(e) {}
@@ -96,6 +103,7 @@ $(document).ready(function () {
                 $('#errorText').text('游戏无法结束。');
                 $('#gameStartError').show();
             } else {
+                adminGameEnded = true;
                 gameGroup = msg.groups;
                 window.gameGroup = gameGroup;
                 try { sessionStorage.setItem('beerGameGroup', JSON.stringify(gameGroup)); } catch(e) {}
@@ -139,7 +147,7 @@ socket.on('update table', function (msg) {
     gameGroup = msg.groups;
                 window.gameGroup = gameGroup;
                 try { sessionStorage.setItem('beerGameGroup', JSON.stringify(gameGroup)); } catch(e) {}
-    refreshTable(gameGroup, msg.numUsers, false);
+    refreshTable(gameGroup, msg.numUsers, adminGameStarted);
 });
 
 // 某个团队完成一周时触发
@@ -155,6 +163,8 @@ socket.on('update group', function (msg) {
 
 // 游戏开始时改变UI
 function startGame(numUsers) {
+    adminGameStarted = true;
+    adminGameEnded = false;
     $('#btnStartGame').hide();
     $('#btnEndGame').show();
     $('#btnResetGame').show();
@@ -172,6 +182,8 @@ function startGame(numUsers) {
 
 // 按盈利排序团队
 function rankGroups(numUsers) {
+    adminGameStarted = true;
+    adminGameEnded = true;
     $('#groupRank').text("排名");
     var lowestWeek = gameGroup[gameGroup.length - 1].week;
     for (var i = 0; i < gameGroup.length; i++) {
@@ -240,7 +252,12 @@ function refreshTable(groups, numUsers, gameStarted) {
         var numParticipants = '当前有 ' + numUsers + ' 名参与者。';
     }
 
-    $('#status').text('游戏尚未开始。' + numParticipants);
+    if (gameStarted) {
+        var statusPrefix = adminGameEnded ? '游戏已结束。' : '游戏已开始。';
+        $('#status').text(statusPrefix + numParticipants);
+    } else {
+        $('#status').text('游戏尚未开始。' + numParticipants);
+    }
 }
 
 // 图表详情
