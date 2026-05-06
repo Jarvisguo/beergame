@@ -1,38 +1,129 @@
-# Beer Distribution Game Simulator
-This project uses [Node.js](https://nodejs.org/en/) + [Socket.io](https://socket.io/) to provide a modern, browser-based, real-time simulation of the [Beer Distribution Game developed by MIT Sloan](https://en.wikipedia.org/wiki/Beer_distribution_game) in the 1960s. This simulation is easy to setup and has been successfuly used to quickly teach people the key principles of supply chain management. The included graphs and tables allow you to rank groups and observe the [bullwhip effect](https://en.wikipedia.org/wiki/Bullwhip_effect). You can try out a [live demo here](http://beerdistribution.herokuapp.com/).
+# 啤酒分销游戏模拟器
 
-## Technical ##
-### Installation ###
-All the game requires is a Node server to run (i.e., you can just upload to a Heroku instance and be on your way) as it doesn't persist any data outside of memory. Dependencies can be installed using `npm install` and the server can be run using `node index.js`.
+这是一个基于 Node.js、Express 和 Socket.IO 的实时网页版 Beer Distribution Game。项目用于课堂或培训场景，支持多个 4 人小组同时进行供应链运营模拟，并在管理端查看小组状态、趋势图和经营报告。
 
-### Overview ###
-The source code is pretty simple. The server is wholly contained in `index.js` and the client is in `/public`, split into the user side (`client.js` and `index.html`) and admin side (`admin.html` and `admin.js`). There's a couple of font styles contained in `style.css`.
+当前版本已经升级到 Socket.IO 4.x，默认游戏总轮次为 26 周。
 
-This code uses the excellent [animate.css](http://daneden.me/animate), [CountUp.js](https://inorganik.github.io/countUp.js/), and [Bootstrap Validator](http://1000hz.github.io/bootstrap-validator/) libraries.
+## 功能概览
 
-## Game ##
-### Setup ###
-Once the server is running, users can connect using a desktop or mobile browser. They must create a unique username at which point they are assigned to a group. To prevent collusion that could ruin the simulation, users don't see who else is in their group until the end.
+- 玩家端：4 个角色组成一队，分别为零售商、批发商、区域仓库、工厂。
+- 管理端：创建和开始游戏、查看在线人数、小组成员、总库存、总积压、待下单角色和趋势图。
+- 经营报告：从管理端打开，汇总团队成本、库存、积压、订单波动和牛鞭效应指标。
+- 手机断线容忍：玩家手机切后台或锁屏导致 Socket 断开时，默认保留座位 5 分钟。
+- 同用户名恢复：玩家在宽限期内用同一用户名重新登录，会恢复原小组、座位、角色和当前状态。
+- 防抢座：不同用户名不能占用暂离玩家的座位。
 
-The game requires at least one group of 4 players, but can theoretically support an unlimited number of groups. All groups need to be filled with 4 players for the game to start. If a user drops out, their seat is saved and they can relogin with the same username to get back to their group.
+## 技术栈
 
-An administrator can login using the `admin.html` page with the password `admin`. From there, they can control the game, manage groups, and.
+- Node.js 18
+- Express 4
+- Socket.IO 4
+- Bootstrap 3
+- 原生 HTML/CSS/JavaScript
 
-### Gameplay ###
-The game is turn-based, with every turn representing a "week" of gameplay. A turn consists of users receiving orders, fulfilling orders, and then submitting an order request up the chain. Each group can advance from week to week independently, but a group must wait until all members have submitted a new order before auto-advancing to the next week. A typical game should run around 30-40 weeks but the game has no set limit.
+项目数据保存在服务端内存中。重启服务会清空当前游戏状态。
 
-## Contributing ##
-There are a number of outstanding features that would be nice to add. In addition, there are likely still some bugs with the mechanics. All changes are welcome! To contribute, you can follow the standard GitHub flow:
-* Submit your issue, assuming one does not already exist.
- * Clearly describe the issue including steps to reproduce when it is a bug.
- * Fork the repository on GitHub
-* Create a topic branch from where you want to base your work.
-  * This is usually the master branch.
-  * To quickly create a topic branch based on master; `git checkout -b
-    fix/master/my_contribution master`. Please avoid working directly on the
-    `master` branch.
-* Make commits of logical units.
- * Check for unnecessary whitespace with `git diff --check` before committing.
- * Make sure your commit messages are descriptive.
-* Push your changes to a topic branch in your fork of the repository.
-* Submit a pull request to this repository referencing the issue.
+## 本地运行
+
+```bash
+npm install
+npm start
+```
+
+默认监听端口为 `3000`，访问：
+
+- 玩家入口：`http://localhost:3000/`
+- 管理入口：`http://localhost:3000/admin.html`
+- 经营报告：管理端点击“生成报告”，或访问 `http://localhost:3000/report.html`
+
+## 环境变量
+
+可以参考 `.env.example`：
+
+```bash
+ADMIN_PASSWORD=change-me
+MOBILE_RECONNECT_GRACE_MS=300000
+```
+
+| 变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `PORT` | `3000` | 服务监听端口，Zeabur 通常会自动注入。 |
+| `ADMIN_PASSWORD` | `admin` | 管理员登录密码。生产部署必须修改。 |
+| `MOBILE_RECONNECT_GRACE_MS` | `300000` | 玩家断线后保留座位的宽限期，单位毫秒。默认 5 分钟。 |
+
+## Zeabur 部署
+
+1. 将代码推送到 GitHub。
+2. 在 Zeabur 新建服务，选择该 GitHub 仓库。
+3. 运行命令使用项目默认脚本：
+   - Install Command: `npm install`
+   - Start Command: `npm start`
+4. 在 Zeabur 环境变量中至少设置：
+   - `ADMIN_PASSWORD`: 管理员密码
+   - `MOBILE_RECONNECT_GRACE_MS`: `300000`
+5. 部署完成后打开 Zeabur 分配的域名：
+   - 玩家访问根路径 `/`
+   - 管理员访问 `/admin.html`
+
+不要在生产环境继续使用默认管理员密码 `admin`。
+
+## 游戏流程
+
+1. 玩家打开根路径并输入唯一用户名。
+2. 系统按顺序分配角色：零售商、批发商、区域仓库、工厂。
+3. 每满 4 人组成一个小组。所有小组都满员后，管理员可以开始游戏。
+4. 每一周玩家根据自己的库存、积压、收货和下游订单决定向上游下单数量。
+5. 同一小组 4 个角色都提交订单后，该小组自动进入下一周。
+6. 游戏默认运营 26 周。第 26 周仍可提交订单，完成后停止继续下单。
+7. 管理员可以在管理端查看看板、趋势图，并生成经营报告。
+
+## 手机断线与重连
+
+移动端浏览器切后台、锁屏或网络切换时，Socket.IO 可能触发断开。服务端不会立即移除玩家，而是进入暂离状态：
+
+- 默认 5 分钟内，同用户名重新登录会恢复原座位和角色。
+- 暂离玩家仍占用座位，其他用户名不能抢占。
+- 暂离期间管理员看板保留该玩家状态。
+- 超过宽限期仍未重连，玩家才会被标记离线，在线人数减少。
+
+如需调整宽限期，在 Zeabur 设置 `MOBILE_RECONNECT_GRACE_MS`。
+
+## 测试
+
+```bash
+npm test
+```
+
+测试覆盖：
+
+- 玩家角色面板展示
+- 管理端状态和看板指标
+- Socket.IO 登录、开始游戏、断线重连、26 周上限
+- 4 角色小组 5 轮运营计算
+- 经营报告关键指标
+
+## 目录结构
+
+```text
+.
+├── index.js                         # Express + Socket.IO 服务端和游戏计算
+├── public/
+│   ├── index.html                   # 玩家端页面
+│   ├── client.js                    # 玩家端逻辑
+│   ├── admin.html                   # 管理端页面
+│   ├── admin.js                     # 管理端逻辑
+│   └── report.html                  # 经营报告页面
+├── tests/
+│   ├── unit/                        # 前端脚本单元测试
+│   └── integration/                 # Socket.IO 集成测试
+├── docs/testing-plan.md             # 功能测试计划
+├── package.json
+└── .env.example
+```
+
+## 维护说明
+
+- 当前游戏轮次上限在服务端和前端均为 26 周。
+- 管理端报告数据来自当前服务端内存状态，不是持久化报表。
+- 修改游戏计算逻辑后，应同步更新 `tests/integration/five-week-operations.test.js` 中的期望值。
+- 修改 Socket.IO 行为后，应运行完整 `npm test`，避免移动端重连和断线宽限逻辑回归。
