@@ -30,6 +30,23 @@ function formatWeek(g) {
   return `已完成 ${completed} 轮，当前第 ${w} 周`;
 }
 
+function calcGroupBullwhip(g) {
+  if (!g.users || g.users.length === 0) return null;
+  let maxCV = -1;
+  for (const u of g.users) {
+    const orders = (u.orderHistory || []).filter(x => typeof x === 'number');
+    if (orders.length < 2) continue;
+    const mean = orders.reduce((a, b) => a + b, 0) / orders.length;
+    const variance = orders.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / orders.length;
+    const cv = Math.sqrt(variance) / (mean || 1);
+    if (cv > maxCV) maxCV = cv;
+  }
+  if (maxCV < 0) return null;
+  if (maxCV >= 0.3) return { label: '剧烈', cls: 'tag-red' };
+  if (maxCV >= 0.1) return { label: '波动', cls: 'tag-yellow' };
+  return { label: '稳定', cls: 'tag-green' };
+}
+
 function updateAdminStatus() {
   const n = gameGroup.reduce((a, g) => a + g.users.filter(u => u.socketId).length, 0);
   const trendText = { growth: '增长趋势', decline: '下降趋势', mixed: '混合趋势' }[$('#demandTrend').value || 'mixed'];
@@ -64,6 +81,18 @@ function refreshTable(groups, gameStarted) {
     }
 
     html += `<td>${totalInv}</td><td>${totalBack}</td>`;
+
+    if (gameStarted) {
+      const cost = g.cost || 0;
+      html += `<td>¥${cost.toFixed(0)}</td>`;
+      const bw = calcGroupBullwhip(g);
+      html += bw
+        ? `<td><span class="tag ${bw.cls}">${bw.label}</span></td>`
+        : '<td>—</td>';
+    } else {
+      html += '<td>—</td><td>—</td>';
+    }
+
     const waiting = g.waitingForOrders || [];
     html += `<td>${waiting.length ? waiting.join('、') : '-'}</td>`;
 
@@ -83,87 +112,6 @@ function refreshTable(groups, gameStarted) {
   updateAdminStatus();
 }
 
-// ── Charts ────────────────────────────────────────────────────────────
-function drawChart(groupIdx, type) {
-  const canvas = $('#chartCanvas');
-  const ctx = canvas.getContext('2d');
-  const w = canvas.width, h = canvas.height;
-
-  const g = gameGroup[groupIdx];
-  if (!g || !g.users || g.users.length === 0) { ctx.clearRect(0, 0, w, h); return; }
-
-  const users = g.users;
-  const colors = ['#4a90d9', '#e76f51', '#2a9d8f', '#e9c46a'];
-
-  // Collect data
-  const histories = users.map(u => {
-    if (type === 'cost') return u.costHistory || [];
-    if (type === 'inventory') return (u.inventoryHistory || []).map((inv, i) => inv - (u.backlogHistory[i] || 0));
-    if (type === 'orders') return u.orderHistory || [];
-    return [];
-  });
-
-  const maxLen = Math.max(...histories.map(h => h.length));
-  if (maxLen === 0) { ctx.clearRect(0, 0, w, h); return; }
-
-  const allVals = histories.flat();
-  const maxVal = Math.max(...allVals, 1);
-  const minVal = Math.min(0, ...allVals);
-
-  const pad = { top: 20, right: 20, bottom: 40, left: 50 };
-  const pw = w - pad.left - pad.right;
-  const ph = h - pad.top - pad.bottom;
-  const range = maxVal - minVal || 1;
-
-  ctx.clearRect(0, 0, w, h);
-
-  // Grid
-  ctx.strokeStyle = '#e0e0e0';
-  ctx.lineWidth = 0.5;
-  for (let i = 0; i <= 4; i++) {
-    const y = pad.top + (ph / 4) * i;
-    ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(w - pad.right, y); ctx.stroke();
-    const val = maxVal - (range / 4) * i;
-    ctx.fillStyle = '#666'; ctx.font = '11px sans-serif';
-    ctx.textAlign = 'right';
-    ctx.fillText(Math.round(val).toString(), pad.left - 6, y + 4);
-  }
-
-  // X-axis labels
-  ctx.fillStyle = '#666'; ctx.textAlign = 'center';
-  for (let i = 0; i < maxLen; i++) {
-    const x = pad.left + (pw / Math.max(maxLen - 1, 1)) * i;
-    ctx.fillText((i + 1).toString(), x, h - pad.bottom + 16);
-  }
-
-  // Title
-  ctx.fillStyle = '#333'; ctx.font = 'bold 13px sans-serif';
-  ctx.textAlign = 'center';
-  const titles = { cost: '成本 (¥)', inventory: '库存 (单位)', orders: '订单 (单位)' };
-  ctx.fillText(titles[type] || '', w / 2, 14);
-
-  // Lines
-  histories.forEach((hist, idx) => {
-    if (hist.length < 2) return;
-    ctx.strokeStyle = colors[idx];
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    hist.forEach((val, i) => {
-      const x = pad.left + (pw / Math.max(hist.length - 1, 1)) * i;
-      const y = pad.top + ph - ((val - minVal) / range) * ph;
-      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-    });
-    ctx.stroke();
-
-    // Legend dot
-    const lx = pad.left + 60 * idx + 10;
-    ctx.fillStyle = colors[idx];
-    ctx.beginPath(); ctx.arc(lx, h - 8, 5, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#333'; ctx.textAlign = 'start';
-    ctx.fillText(users[idx].role.name, lx + 8, h - 4);
-  });
-}
-
 // ── Socket Events ─────────────────────────────────────────────────────
 socket.on('update table', (msg) => {
   gameGroup = msg.groups;
@@ -175,9 +123,6 @@ socket.on('update table', (msg) => {
 socket.on('update group', (msg) => {
   gameGroup[msg.groupNum] = msg.groupData;
   refreshTable(gameGroup, true);
-  const g = parseInt($('#chartGroup').value);
-  const t = $('#chartType').value;
-  if (!isNaN(g)) drawChart(g, t);
 });
 
 // ── Admin Login ───────────────────────────────────────────────────────
@@ -261,7 +206,6 @@ $('#btnResetGame').addEventListener('click', () => {
       $('#btnEndGame').disabled = false;
       $('#btnEndGame').hidden = true;
       $('#btnResetGame').hidden = true;
-      $('#charts').hidden = true;
       $('#gameSettings').hidden = false;
       $('#groupRank').textContent = '团队 #';
       refreshTable(gameGroup, false);
@@ -287,14 +231,6 @@ $('#adminTbody').addEventListener('click', (e) => {
   });
 });
 
-// Chart controls
-$('#chartGroup').addEventListener('change', () => {
-  drawChart(parseInt($('#chartGroup').value), $('#chartType').value);
-});
-$('#chartType').addEventListener('change', () => {
-  drawChart(parseInt($('#chartGroup').value), $('#chartType').value);
-});
-
 // ── Helpers ───────────────────────────────────────────────────────────
 function startGameUI(numUsers) {
   adminGameStarted = true;
@@ -305,18 +241,7 @@ function startGameUI(numUsers) {
   $('#btnEndGame').hidden = false;
   $('#btnResetGame').hidden = false;
 
-  // Populate chart group selector
-  const sel = $('#chartGroup');
-  sel.innerHTML = '';
-  gameGroup.forEach((_, i) => {
-    const opt = document.createElement('option');
-    opt.value = i; opt.textContent = i + 1;
-    sel.appendChild(opt);
-  });
-  $('#charts').hidden = false;
-
   refreshTable(gameGroup, true);
-  drawChart(0, $('#chartType').value);
 }
 
 function rankGroups() {

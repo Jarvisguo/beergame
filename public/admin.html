@@ -34,7 +34,7 @@
   </div>
 
   <div class="admin-layout">
-    <div class="admin-left">
+    <div class="admin-left" style="width:100%">
       <div class="panel" id="groupPanel" hidden>
         <div class="panel-head">团队</div>
         <div class="table-wrap">
@@ -42,27 +42,12 @@
             <thead><tr>
               <th id="groupRank">团队 #</th>
               <th>零售商</th><th>批发商</th><th>区域仓库</th><th>工厂</th>
-              <th class="num-col">总库存</th><th class="num-col">总积压</th><th>待下单</th><th></th>
+              <th class="num-col">总库存</th><th class="num-col">总积压</th>
+              <th class="num-col">团队总成本</th><th class="num-col">牛鞭效应</th>
+              <th>待下单</th><th></th>
             </tr></thead>
             <tbody id="adminTbody"></tbody>
           </table>
-        </div>
-      </div>
-    </div>
-
-    <div class="admin-right">
-      <div class="panel" id="charts" hidden>
-        <div class="panel-head">图表</div>
-        <div class="panel-body">
-          <div class="chart-controls">
-            <select class="input input-sm" id="chartGroup"></select>
-            <select class="input input-sm" id="chartType">
-              <option value="cost">成本</option>
-              <option value="inventory">库存</option>
-              <option value="orders">订单</option>
-            </select>
-          </div>
-          <canvas id="chartCanvas" width="520" height="300"></canvas>
         </div>
       </div>
     </div>

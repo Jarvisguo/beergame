@@ -191,9 +191,15 @@
     document.getElementById('weekSummary').textContent = weekSummaryText;
 
     if (allCosts.length > 0) {
+      // Sort groups by cost (lowest first), preserving original index
+      var sortedGroups = JSON.parse(JSON.stringify(gameGroup));
+      for (var i = 0; i < sortedGroups.length; i++) {
+        sortedGroups[i]._originalIndex = i;
+      }
+      sortedGroups.sort(function(a, b) { return a.cost - b.cost; });
+
       allCosts.sort(function(a, b) { return a - b; });
       var avg = allCosts.reduce(function(a, b) { return a + b; }, 0) / allCosts.length;
-      // Find which original team is the champion (lowest cost)
       var champion = sortedGroups[0];
       var champNum = (champion._originalIndex !== undefined ? champion._originalIndex : 0) + 1;
       document.getElementById('bestTeam').textContent = '团队 #' + champNum;
@@ -201,30 +207,9 @@
       document.getElementById('avgCost').textContent = '¥' + Math.round(avg);
       document.getElementById('worstCost').textContent = '¥' + Math.round(allCosts[allCosts.length - 1]);
 
-      // Global bullwhip metrics (updated after group cards are generated)
-      setTimeout(function() {
-        if (allBullwhipScores.length > 0) {
-          var avgBw = allBullwhipScores.reduce(function(a, b) { return a + b; }, 0) / allBullwhipScores.length;
-          var severeCount = allBullwhipScores.filter(function(s) { return s > 50; }).length;
-          var maxBw = Math.max.apply(null, allBullwhipScores);
-          document.getElementById('avgBullwhip').textContent = Math.round(avgBw) + '%';
-          document.getElementById('severeBullwhip').textContent = severeCount + ' / ' + allBullwhipScores.length;
-          document.getElementById('maxBullwhipScore').textContent = Math.round(maxBw) + '%';
-        }
-      }, 100);
-    }
-
-    // Sort groups by cost (lowest first), preserving original index
-    var allBullwhipScores = [];
-    var sortedGroups = JSON.parse(JSON.stringify(gameGroup));
-    // Store original index before sorting
-    for (var i = 0; i < sortedGroups.length; i++) {
-      sortedGroups[i]._originalIndex = i;
-    }
-    sortedGroups.sort(function(a, b) { return a.cost - b.cost; });
-
-    // Generate group cards
-    var html = '';
+      // Generate group cards
+      var allBullwhipScores = [];
+      var html = '';
     for (var rank = 0; rank < sortedGroups.length; rank++) {
       var group = sortedGroups[rank];
       var groupNum = rank + 1;
@@ -391,21 +376,29 @@
 
     document.getElementById('groupsContainer').innerHTML = html;
 
-    // Key insight
-    if (allCosts.length > 0) {
-      var best = allCosts[0];
-      var worst = allCosts[allCosts.length - 1];
-      var ratio = worst / best;
-      var insight = '';
-      if (ratio > 5) {
-        insight = '各团队成本差距非常大（' + Math.round(ratio) + '倍），说明供应链协调能力差异显著。冠军团队的成本控制策略值得深入分析。';
-      } else if (ratio > 2) {
-        insight = '优秀团队的成本不到最差团队的1/' + Math.round(ratio) + '。牛鞭效应对各团队的影响差异明显。';
-      } else {
-        insight = '所有团队都面临类似的挑战。牛鞭效应是系统性问题，需要从供应链整体协调的角度来解决。';
-      }
-      document.getElementById('insightText').textContent = insight;
+    // Global bullwhip stats
+    if (allBullwhipScores.length > 0) {
+      var avgBw = allBullwhipScores.reduce(function(a, b) { return a + b; }, 0) / allBullwhipScores.length;
+      var severeCount = allBullwhipScores.filter(function(s) { return s > 50; }).length;
+      var maxBw = Math.max.apply(null, allBullwhipScores);
+      document.getElementById('avgBullwhip').textContent = Math.round(avgBw) + '%';
+      document.getElementById('severeBullwhip').textContent = severeCount + ' / ' + allBullwhipScores.length;
+      document.getElementById('maxBullwhipScore').textContent = Math.round(maxBw) + '%';
     }
+
+    // Key insight
+    var best = allCosts[0];
+    var worst = allCosts[allCosts.length - 1];
+    var ratio = worst / best;
+    var insight = '';
+    if (ratio > 5) {
+      insight = '各团队成本差距非常大（' + Math.round(ratio) + '倍），说明供应链协调能力差异显著。冠军团队的成本控制策略值得深入分析。';
+    } else if (ratio > 2) {
+      insight = '优秀团队的成本不到最差团队的1/' + Math.round(ratio) + '。牛鞭效应对各团队的影响差异明显。';
+    } else {
+      insight = '所有团队都面临类似的挑战。牛鞭效应是系统性问题，需要从供应链整体协调的角度来解决。';
+    }
+    document.getElementById('insightText').textContent = insight;
   }
 
   // Auto-generate on load

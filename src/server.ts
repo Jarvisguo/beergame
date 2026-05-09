@@ -269,11 +269,11 @@ function advanceTurn(groupIndex: number): void {
 
     user.orderHistory.push(user.role.upstream.orders);
 
-    // 6. Accumulate costs
-    g.cost += user.cost;
+    // 6. Accumulate per-turn cost
     user.cost += user.inventory * INVENTORY_COST + user.backlog * BACKLOG_COST;
   }
 
+  g.cost = g.users.reduce((sum, u) => sum + u.cost, 0);
   g.costHistory.push(g.cost);
 
   // Advance week
