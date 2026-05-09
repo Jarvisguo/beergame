@@ -300,7 +300,7 @@ function advanceTurn(groupIndex: number): void {
 
 function initGroup(groupIndex: number): void {
   const g = groups[groupIndex];
-  g.waitingForOrders = [...BEER_NAMES];
+  g.waitingForOrders = g.users.map(u => u.role.name);
   g.demandTrend = currentDemandTrend;
   g.demandProfile = DEMAND_PROFILES[currentDemandTrend];
   g.shipping = [];
@@ -441,7 +441,7 @@ const io = new Server(http, {
   connectTimeout: 45000,
 });
 
-app.use(express.static(resolve(__dirname, '..', 'public')));
+app.use(express.static(resolve(__dirname, '..', 'public'), { etag: false, lastModified: false, setHeaders: (res) => res.setHeader('Cache-Control', 'no-store') }));
 
 io.on('connection', (socket: Socket) => {
   let addedUser = false;
@@ -494,14 +494,19 @@ io.on('connection', (socket: Socket) => {
       if (gameStarted && !gameEnded && g.week === 0 && g.users.length === 4) {
         initGroup(user.group);
       } else if (gameStarted && !gameEnded && g.week > 0 && !reconnecting) {
-        // Game already running, send current state to newly joining player
+        // New player joining mid-game: add to waitingForOrders for current week
+        if (!g.waitingForOrders.includes(g.users[user.index].role.name)) {
+          g.waitingForOrders.push(g.users[user.index].role.name);
+        }
         socket.emit('game started', {
           numUsers,
           week: g.week,
           waitingForOrders: g.waitingForOrders,
           demandTrend: g.demandTrend,
           demandProfile: g.demandProfile,
+          users: g.users,
         });
+        io.to(groupRoom(user.group)).emit('update order wait', g.waitingForOrders);
       }
 
       socket.broadcast.emit('user joined', { username: (socket as any).name, numUsers });
