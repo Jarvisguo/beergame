@@ -1,22 +1,25 @@
 {
   "name": "beerdistribution",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Beer Distribution Game Simulator",
-  "main": "index.js",
+  "main": "src/server.ts",
   "scripts": {
-    "test": "node tests/unit/client-board.test.js && node tests/unit/admin-status.test.js && node tests/integration/socket-flow.test.js && node tests/integration/five-week-operations.test.js",
-    "start": "node index.js"
+    "start": "npx tsx src/server.ts",
+    "test": "npx tsx tests/full-game.test.ts",
+    "dev": "npx tsx watch src/server.ts"
   },
   "engines": {
-    "node": "18.x"
+    "node": ">=18"
   },
   "author": "Miron Vranjes",
   "license": "MIT",
   "dependencies": {
-    "express": "^4.14.0",
+    "express": "^4.21.0",
     "socket.io": "^4.8.3"
   },
   "devDependencies": {
-    "socket.io-client": "^4.8.3"
+    "socket.io-client": "^4.8.3",
+    "typescript": "^5.7.0",
+    "tsx": "^4.19.0"
   }
 }

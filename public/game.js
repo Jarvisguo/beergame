@@ -346,16 +346,8 @@ socket.on('next turn', (msg) => {
   nextTurn(msg.numUsers, msg.week, msg.update);
 });
 
-socket.on('game reset', (msg) => {
-  gameEnded = false;
-  curWeek = msg.week;
-  numUsers = msg.numUsers;
-  $('#lobby').hidden = false;
-  $('#board').hidden = true;
-  $('#analytics').hidden = true;
-  $('#weekInfo').hidden = true;
-  updateGroupTable();
-  updateStatus();
+socket.on('game reset', () => {
+  resetUI();
 });
 
 socket.on('game ended', (msg) => {
@@ -376,6 +368,13 @@ socket.on('update order wait', (list) => {
 
 socket.on('group ready', () => {
   showToast('队伍已满员，等待管理员开始游戏', 4000);
+});
+
+socket.on('game can login', () => {
+  if (!curUser && !$('#loginModal').hidden) {
+    $('#loginErr').hidden = true;
+    showToast('游戏已开始，请输入用户名登录', 4000);
+  }
 });
 
 socket.on('player rejoined', (msg) => {
@@ -491,6 +490,10 @@ $('#btnOrder').addEventListener('click', (e) => {
     $('#orderFlow').hidden = true;
     if (curGroup && resp) {
       curGroup.waitingForOrders = resp;
+    }
+  });
+});
+
 $('#btnDeliver').addEventListener('click', () => {
   $('#deliveryFlow').hidden = true;
   if (curUser && curUser.role) {

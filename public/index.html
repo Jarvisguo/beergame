@@ -1,305 +1,176 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
-
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="X-UA-Compatible" content="IE=edge">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="啤酒分销游戏">
-  <meta name="author" content="Miron Vranjes">
-
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1a365d">
   <title>啤酒分销游戏</title>
-
-  <link rel="stylesheet" href="./bootstrap.min.css" crossorigin="anonymous">
-  <link rel="stylesheet" href="./bootstrap-theme.min.css" crossorigin="anonymous">
-  <link rel="stylesheet" href="animate.css">
   <link rel="stylesheet" href="style.css">
-
-  <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@3.4.1/dist/js/bootstrap.min.js"></script>
-  <script src="/socket.io/socket.io.js"></script>
-  <script src="countUp.js"></script>
-  <script src="validator.js"></script>
-  <script src="client.js"></script>
 </head>
-
 <body>
 
-  <div class="modal fade" id="nextTurn" tabindex="-1" role="dialog">
-    <div class="modal-dialog">
-      <div class="modal-content">
-        <div class="modal-header">
-          <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
-          <h4 class="modal-title">欢迎来到第 <span class="weekText">1</span> 周！</h4>
-        </div>
-        <div class="modal-body">
-          <p>您现在进入游戏第 <span class="weekText">1</span> 周。每轮的步骤如下：</p>
-          <ol>
-            <li>接收来自<span class="upstreamName">分销商</span>的<strong>新到货物</strong>。</li>
-            <li>满足<span class="downstreamName">客户</span>的<strong>订单请求</strong>。</li>
-            <li>向<span class="upstreamName">分销商</span>下达<strong>新订单</strong>。</li>
-          </ol>
-          <p>祝您本周顺利！</p>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-primary" data-dismiss="modal">知道了！</button>
+<div class="conn-bar conn-online" id="connBar">🟢 在线</div>
+
+<!-- Login Modal -->
+<div class="modal-overlay" id="loginModal">
+  <div class="modal-box">
+    <div class="modal-header"><h3>请输入您的用户名</h3></div>
+    <div class="modal-body">
+      <p class="hint">输入唯一用户名，系统将自动分配团队和角色。</p>
+      <div class="alert alert-err" id="loginErr" hidden></div>
+      <div class="form-row">
+        <label class="label" for="usernameInput">用户名</label>
+        <input type="text" id="usernameInput" class="input" placeholder="输入用户名" maxlength="15" autocomplete="off" enterkeyhint="go">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary btn-block" id="btnLogin">开始</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast" hidden></div>
+
+<!-- Main App -->
+<div class="container" id="mainApp" hidden>
+  <div class="app-header">
+    <h1>啤酒分销游戏</h1>
+    <div class="user-bar">
+      <span id="userRole"></span>
+      <span class="sep">|</span>
+      <span id="username"></span>
+    </div>
+  </div>
+
+  <p class="status" id="participants">等待游戏开始...</p>
+
+  <div class="week-info" id="weekInfo" hidden>
+    <span class="week-num" id="weekNum">第 0 周</span>
+  </div>
+
+  <!-- Flow Area -->
+  <div class="flow-area" id="flowArea">
+    <div class="flow-card flow-waiting" id="waitingFlow">
+      <div class="flow-icon">⏳</div>
+      <div class="flow-body" id="waitingText">等待其他玩家提交订单...</div>
+    </div>
+    <div class="flow-card flow-delivery" id="deliveryFlow" hidden>
+      <div class="flow-icon">📦</div>
+      <div class="flow-body">
+        <strong id="deliveryText">您有一个新货物。</strong>
+        <button class="btn btn-sm btn-act" id="btnDeliver">接收货物</button>
+      </div>
+    </div>
+    <div class="flow-card flow-fulfill" id="fulfillFlow" hidden>
+      <div class="flow-icon">🚚</div>
+      <div class="flow-body">
+        <strong id="fulfillText">客户正在等待订单。</strong>
+        <button class="btn btn-sm btn-act" id="btnFulfill">完成订单</button>
+      </div>
+    </div>
+    <div class="flow-card flow-order" id="orderFlow" hidden>
+      <div class="flow-icon">📝</div>
+      <div class="flow-body">
+        <strong id="orderText">是时候订货了。</strong>
+        <div class="order-form">
+          <input type="number" id="orderInput" class="input input-sm" placeholder="数量" min="0" inputmode="numeric" pattern="[0-9]*" enterkeyhint="done">
+          <button class="btn btn-sm btn-primary" id="btnOrder">下单</button>
         </div>
       </div>
     </div>
   </div>
 
-  <div class="modal" id="myModal" tabindex="-1" role="dialog" data-backdrop="static" data-keyboard="false">
-    <div class="modal-dialog">
-      <div class="modal-content">
-        <form role="form" data-toggle="validator">
-          <div class="modal-header">
-            <h4 class="modal-title">请输入您的用户名</h4>
-          </div>
-          <div class="modal-body">
-            <p>请输入一个唯一的用户名，系统将随机分配您到一个团队。</p>
-            <div class="alert alert-danger collapse" role="alert" id="errorDialog">
-              <span class="glyphicon glyphicon-exclamation-sign" aria-hidden="true"></span>
-              <span class="sr-only">错误：</span> <span id="errorText">该用户名已被使用！请选择一个不同的用户名。</span>
-            </div>
-            <div class="form-group has-feedback">
-              <label for="formUsername" class="control-label">用户名</label>
-              <div class="input-group">
-                <span class="input-group-addon">
-        <span class="glyphicon glyphicon-user" aria-hidden="true"></span>
-                </span>
-                <input type="text" pattern="^[_A-z0-9\u4e00-\u9fa5]{2,}$" maxlength="15" class="form-control" id="formUsername" placeholder="用户名" required>
-              </div>
-              <span class="glyphicon form-control-feedback" aria-hidden="true"></span>
-              <div class="help-block with-errors">至少3个字符，支持中文</div>
-            </div>
-          </div>
-          <div class="modal-footer form-group">
-            <button type="submit" class="btn btn-primary" id="btnLogin">开始</button>
-          </div>
-        </form>
+  <!-- Game Board -->
+  <div class="board" id="board" hidden>
+    <div class="board-panel board-downstream">
+      <div class="panel-head" id="downstreamRole">客户</div>
+      <div class="panel-body panel-duo">
+        <div><strong>收到订单</strong><span class="big-num" id="dsOrdrAmt">0</span></div>
+        <div><strong>发出货物</strong><span class="big-num" id="dsShpAmt">0</span></div>
       </div>
     </div>
-  </div>
-
-  <div class="container">
-
-    <h2>啤酒分销游戏 <small>Beta</small></h2>
-
-    <nav class="navbar navbar-default">
-      <div class="container-fluid">
-        <div class="navbar-header">
-          <div class="navbar-brand" id="role">加载中...</div>
-        </div>
-        <div class="collapse navbar-collapse">
-          <p class="navbar-text navbar-right" id="username"></p>
-        </div>
+    <div class="board-panel board-center">
+      <div class="panel-head" id="userRoleName">零售商（您）</div>
+      <div class="panel-body panel-trio">
+        <div><strong>成本</strong><span class="mid-num">¥<span id="cstAmt">0</span></span></div>
+        <div><strong>库存</strong><span class="big-num" id="inventoryAmt">12</span></div>
+        <div><strong>积压</strong><span class="big-num" id="bklgAmt">0</span></div>
       </div>
-    </nav>
-
-    <p id="participants">等待游戏开始...</p>
-
-    <div class="panel panel-info" id="rulesPanel">
-      <div class="panel-heading">
-        <h3 class="panel-title">游戏规则</h3>
-      </div>
+    </div>
+    <div class="board-panel board-upstream">
+      <div class="panel-head" id="upstreamRole">批发商</div>
       <div class="panel-body">
-        <div class="row">
-          <div class="col-sm-4">
-            <p><strong>客户需求</strong></p>
-            <p id="demandTrendText">等待管理员选择需求趋势。</p>
-          </div>
-          <div class="col-sm-4">
-            <p><strong>订单 Lead Time</strong></p>
-            <p>你本周向上游下的订单，上游会在下一周收到。</p>
-          </div>
-          <div class="col-sm-4">
-            <p><strong>到货 Lead Time</strong></p>
-            <p>上游本周发出的货物，会在约 2 周后到达你这里。</p>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="alert alert-warning collapse" role="alert" id="waitingOnUsers">
-      <span class="glyphicon glyphicon-exclamation-sign" aria-hidden="true"></span>
-      <span id="waitingText">您的订单已提交。正在等待其他玩家...</span>
-    </div>
-
-    <div class="alert alert-warning collapse" role="alert" id="acceptDelivery">
-      <span class="glyphicon glyphicon glyphicon-inbox" aria-hidden="true"></span>
-      <span id="deliveryText">您有一个来自分销商的新货物。接受以开始！</span>
-      <p class="pull-right">
-        <a class="btn btn-warning" id="btnDeliver" href="#">接收货物</a>
-      </p>
-    </div>
-
-    <div class="alert alert-success collapse" role="alert" id="fulfillOrder">
-      <span class="glyphicon glyphicon-road" aria-hidden="true"></span>
-      <span id="fulfillText">客户正在等待他们的订单。您需要尽可能满足需求！</span>
-      <p class="pull-right">
-        <a class="btn btn-success" id="btnFulfill" href="#">完成订单</a>
-      </p>
-    </div>
-
-    <div class="alert alert-warning collapse" role="alert" id="newOrder">
-      <span class="glyphicon glyphicon-shopping-cart" aria-hidden="true"></span>
-      <span id="orderText">是时候向分销商订货了。填写下方订单表单来下单。</span>
-    </div>
-
-    <div class="panel panel-default" id="lobby">
-      <div class="panel-heading">团队成员</div>
-
-      <table class="table" id="grouptable">
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>用户名</th>
-            <th>角色</th>
-          </tr>
-        </thead>
-
-        <tbody>
-          <tr>
-            <td>1</td>
-            <td>等待中...</td>
-            <td></td>
-          </tr>
-          <tr>
-            <td>2</td>
-            <td>等待中...</td>
-            <td></td>
-          </tr>
-          <tr>
-            <td>3</td>
-            <td>等待中...</td>
-            <td></td>
-          </tr>
-          <tr>
-            <td>4</td>
-            <td>等待中...</td>
-            <td></td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-
-    <div class="row" id="board">
-      <div class="col-sm-3">
-        <div class="panel panel-success">
-          <div class="panel-heading">
-            <h3 class="panel-title" id="downstreamRole">客户</h3>
-          </div>
-          <div class="panel-body">
-            <div class="row">
-              <div class="col-xs-6">
-                <p><strong>收到订单：</strong></p>
-                <p class="unit-amount" id="downstreamOrders"><span id="dsOrdrAmt">0</span><small>单位</small></p>
-              </div>
-              <div class="col-xs-6">
-                <p><strong>发出货物：</strong></p>
-                <p class="unit-amount" id="downstreamShipments"><span id="dsShpAmt">0</span><small>单位</small></p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="col-sm-6">
-        <div class="panel panel-primary">
-          <div class="panel-heading">
-            <h3 class="panel-title" id="userRole">零售商（您）</h3>
-          </div>
-          <div class="panel-body">
-            <div class="row">
-              <div class="col-xs-4">
-                <p><strong>成本：</strong></p>
-                <p class="unit-amount-sm" id="curCost">¥<span id="cstAmt">0.00</span></p>
-              </div>
-              <div class="col-xs-4">
-                <p><strong>库存：</strong></p>
-                <p class="unit-amount" id="curInventory"><span id="inventoryAmt">0</span><small>单位</small></p>
-              </div>
-              <div class="col-xs-4">
-                <p><strong>积压：</strong></p>
-                <p class="unit-amount" id="curBacklog"><span id="bklgAmt">0</span><small>单位</small></p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="col-sm-3">
-        <div class="panel panel-warning">
-          <div class="panel-heading">
-            <h3 class="panel-title" id="upstreamRole">分销商</h3>
-          </div>
-          <div class="panel-body">
-            <p><strong>收到货物：</strong></p>
-            <p class="unit-amount" id="upstreamShipments"><span id="usShpAmt">0</span><small>单位</small></p>
-            <form data-toggle="validator" role="form">
-              <div class="form-group">
-                <div class="input-group">
-                  <input type="text" pattern="^[0-9]+$" data-error="请输入有效数量" class="form-control" id="formOrderAmount" placeholder="数量" required>
-                  <span class="input-group-btn">
-                  <button class="btn btn-warning" type="submit" id="btnOrder">下单</button>
-                </span>
-                </div>
-                <div class="help-block with-errors"></div>
-              </div>
-            </form>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 实时数据分析面板 -->
-    <div class="row" id="analyticsPanel" style="display:none;">
-      <div class="col-sm-12">
-        <div class="panel panel-info">
-          <div class="panel-heading">
-            <h3 class="panel-title">📊 实时数据分析</h3>
-          </div>
-          <div class="panel-body">
-            <div class="row">
-              <!-- 成本趋势 -->
-              <div class="col-sm-6">
-                <p><strong>💰 成本趋势（每轮）</strong></p>
-                <div id="costChart" style="height:80px;display:flex;align-items:flex-end;gap:3px;padding:5px;background:#f8f9fa;border-radius:4px;"></div>
-              </div>
-              <!-- 订单历史 -->
-              <div class="col-sm-6">
-                <p><strong>📦 我的订单历史</strong></p>
-                <div id="orderHistory" style="height:80px;display:flex;align-items:flex-end;gap:3px;padding:5px;background:#f8f9fa;border-radius:4px;overflow-x:auto;"></div>
-              </div>
-            </div>
-            <div class="row" style="margin-top:10px;">
-              <!-- 游戏进度 -->
-              <div class="col-sm-4">
-                <p><strong>📅 游戏进度</strong></p>
-                <div class="progress" style="margin-bottom:0;">
-                  <div class="progress-bar progress-bar-info" id="weekProgress" style="width:0%"></div>
-                </div>
-                <small>第 <span id="currentWeek">0</span> / 26 周</small>
-              </div>
-              <!-- 牛鞭效应指示 -->
-              <div class="col-sm-4">
-                <p><strong>🐂 牛鞭效应</strong></p>
-                <div id="bullwhipIndicator" style="font-size:14px;">
-                  <span class="label label-success">稳定</span>
-                </div>
-              </div>
-              <!-- 供应链状态 -->
-              <div class="col-sm-4">
-                <p><strong>🔗 供应链状态</strong></p>
-                <div id="supplyChainStatus" style="font-size:12px;">
-                  <span class="label label-default">等待中</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <strong>收到货物</strong>
+        <span class="big-num" id="usShpAmt">0</span>
       </div>
     </div>
   </div>
 
-</body>
+  <!-- Analytics -->
+  <div class="analytics" id="analytics" hidden>
+    <div class="analytics-head">实时分析</div>
+    <div class="analytics-grid">
+      <div class="analytics-card">
+        <div class="alabel">成本趋势</div>
+        <div class="bar-chart" id="costChart"></div>
+      </div>
+      <div class="analytics-card">
+        <div class="alabel">订单历史</div>
+        <div class="bar-chart" id="orderHist"></div>
+      </div>
+      <div class="analytics-card">
+        <div class="alabel">牛鞭效应 <button class="btn-info-sm" id="btnBullwhipInfo" title="计算方法">?</button></div>
+        <div class="avalue" id="bullwhip">—</div>
+      </div>
+      <div class="analytics-card">
+        <div class="alabel">供应链状态</div>
+        <div class="avalue" id="supplyStatus">—</div>
+      </div>
+    </div>
+    <div class="progress-wrap">
+      <div class="progress-track"><div class="progress-fill" id="weekProgress"></div></div>
+      <span class="progress-label"><span id="weekLabel">0</span> / 26 周</span>
+    </div>
+  </div>
 
+  <!-- Lobby -->
+  <div class="panel" id="lobby">
+    <div class="panel-head">团队成员</div>
+    <table class="table" id="groupTable">
+      <thead><tr><th>#</th><th>用户名</th><th>角色</th><th>牛鞭效应</th></tr></thead>
+      <tbody id="groupTbody">
+        <tr><td>1</td><td>等待中...</td><td></td><td>—</td></tr>
+        <tr><td>2</td><td>等待中...</td><td></td><td>—</td></tr>
+        <tr><td>3</td><td>等待中...</td><td></td><td>—</td></tr>
+        <tr><td>4</td><td>等待中...</td><td></td><td>—</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="game.js"></script>
+
+<!-- Bullwhip Info Modal -->
+<div class="modal-overlay" id="bullwhipModal" hidden>
+  <div class="modal-box">
+    <div class="modal-header"><h3>牛鞭效应计算方法</h3></div>
+    <div class="modal-body" style="font-size:14px;line-height:1.8;">
+      <p><strong>变异系数 (CV)</strong> = 标准差 / 平均值</p>
+      <p style="margin-top:8px;">CV 衡量订单的波动程度：</p>
+      <ul style="padding-left:20px;margin-top:4px;">
+        <li><span class="tag tag-green">CV &lt; 10%</span> — 稳定：订单量稳定，牛鞭效应轻微</li>
+        <li><span class="tag tag-yellow">CV 10%–30%</span> — 波动：订单出现一定波动</li>
+        <li><span class="tag tag-red">CV &ge; 30%</span> — 剧烈：订单大幅波动，牛鞭效应严重</li>
+      </ul>
+      <p style="margin-top:12px;"><strong>牛鞭效应</strong>是供应链中需求信息扭曲放大的现象——下游需求的微小变化在向上游传递时被逐级放大，导致上游供应商面临越来越大的订单波动。</p>
+      <p style="margin-top:8px;">降低牛鞭效应的策略：信息共享、减少订货批量、稳定价格、避免恐慌性订货。</p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary btn-block" id="btnBullwhipClose">知道了</button>
+    </div>
+  </div>
+</div>
+</body>
 </html>

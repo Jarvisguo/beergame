@@ -25,7 +25,8 @@
     .group-rank-2 .rank-badge { background: #c0c0c0; color: #333; }
     .group-rank-3 .rank-badge { background: #cd7f32; color: white; }
     .group-body { padding: 15px 20px; }
-    .metrics-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 15px; }
+    .metrics-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 15px; }
+    @media (min-width: 768px) { .metrics-grid { grid-template-columns: repeat(6, 1fr); } }
     .metric-item { background: #f0f4f8; border-radius: 6px; padding: 12px; text-align: center; }
     .metric-label { font-size: 11px; color: #888; text-transform: uppercase; margin-bottom: 4px; }
     .metric-value { font-size: 20px; font-weight: bold; color: #2c5f7a; }
@@ -72,6 +73,7 @@
   <span id="reportDate">生成时间：加载中...</span>
   <span id="gameWeeks">游戏周期：- 周</span>
   <span id="totalGroups">团队数量：- 组</span>
+  <span id="groupIds">团队编号：-</span>
 </div>
 
 <div class="summary-box">
@@ -80,6 +82,10 @@
     <div class="metric-item">
       <div class="metric-label">总参与人数</div>
       <div class="metric-value" id="totalPlayers">-</div>
+    </div>
+    <div class="metric-item">
+      <div class="metric-label">冠军团队</div>
+      <div class="metric-value" id="bestTeam">-</div>
     </div>
     <div class="metric-item">
       <div class="metric-label">冠军团队成本</div>
@@ -92,6 +98,22 @@
     <div class="metric-item">
       <div class="metric-label">最高团队成本</div>
       <div class="metric-value cost" id="worstCost">-</div>
+    </div>
+    <div class="metric-item">
+      <div class="metric-label">各队完成周数</div>
+      <div class="metric-value" id="weekSummary" style="font-size:12px;">-</div>
+    </div>
+    <div class="metric-item">
+      <div class="metric-label">平均牛鞭分</div>
+      <div class="metric-value" id="avgBullwhip">-</div>
+    </div>
+    <div class="metric-item">
+      <div class="metric-label">严重牛鞭团队</div>
+      <div class="metric-value cost" id="severeBullwhip">-</div>
+    </div>
+    <div class="metric-item">
+      <div class="metric-label">最高牛鞭分</div>
+      <div class="metric-value cost" id="maxBullwhipScore">-</div>
     </div>
   </div>
 </div>
@@ -161,18 +183,44 @@
     document.getElementById('totalPlayers').textContent = totalPlayers + ' 人';
     document.getElementById('gameWeeks').textContent = formatGameWeek(allWeeks);
     document.getElementById('totalGroups').textContent = '团队数量：' + gameGroup.length + ' 组';
+    document.getElementById('groupIds').textContent = '团队编号：' + gameGroup.map(function(_, i) { return '#' + (i + 1); }).join(', ');
     document.getElementById('reportDate').textContent = '生成时间：' + new Date().toLocaleString('zh-CN');
+
+    // Week summary
+    var weekSummaryText = gameGroup.map(function(g, i) { return '#' + (i + 1) + ': ' + formatGameWeek(g.week || 0); }).join('；');
+    document.getElementById('weekSummary').textContent = weekSummaryText;
 
     if (allCosts.length > 0) {
       allCosts.sort(function(a, b) { return a - b; });
       var avg = allCosts.reduce(function(a, b) { return a + b; }, 0) / allCosts.length;
+      // Find which original team is the champion (lowest cost)
+      var champion = sortedGroups[0];
+      var champNum = (champion._originalIndex !== undefined ? champion._originalIndex : 0) + 1;
+      document.getElementById('bestTeam').textContent = '团队 #' + champNum;
       document.getElementById('bestCost').textContent = '¥' + Math.round(allCosts[0]);
       document.getElementById('avgCost').textContent = '¥' + Math.round(avg);
       document.getElementById('worstCost').textContent = '¥' + Math.round(allCosts[allCosts.length - 1]);
+
+      // Global bullwhip metrics (updated after group cards are generated)
+      setTimeout(function() {
+        if (allBullwhipScores.length > 0) {
+          var avgBw = allBullwhipScores.reduce(function(a, b) { return a + b; }, 0) / allBullwhipScores.length;
+          var severeCount = allBullwhipScores.filter(function(s) { return s > 50; }).length;
+          var maxBw = Math.max.apply(null, allBullwhipScores);
+          document.getElementById('avgBullwhip').textContent = Math.round(avgBw) + '%';
+          document.getElementById('severeBullwhip').textContent = severeCount + ' / ' + allBullwhipScores.length;
+          document.getElementById('maxBullwhipScore').textContent = Math.round(maxBw) + '%';
+        }
+      }, 100);
     }
 
-    // Sort groups by cost (lowest first)
+    // Sort groups by cost (lowest first), preserving original index
+    var allBullwhipScores = [];
     var sortedGroups = JSON.parse(JSON.stringify(gameGroup));
+    // Store original index before sorting
+    for (var i = 0; i < sortedGroups.length; i++) {
+      sortedGroups[i]._originalIndex = i;
+    }
     sortedGroups.sort(function(a, b) { return a.cost - b.cost; });
 
     // Generate group cards
@@ -262,6 +310,7 @@
       
       // Team bullwhip: max score among all roles
       var maxBullwhip = Math.max.apply(null, bullwhipData.map(function(d) { return d.bullwhipScore; }));
+      allBullwhipScores.push(maxBullwhip);
       
       // Determine bullwhip level
       var bullwhipLevel = 'low';
@@ -302,9 +351,10 @@
         }
       }
 
+      var teamNumber = (group._originalIndex !== undefined ? group._originalIndex : rank) + 1;
       html += '<div class="group-card group-rank-' + groupNum + '">' +
         '<div class="group-header">' +
-          '<div><h4>第 ' + groupNum + ' 名团队</h4><small style="opacity:0.8">' + formatGameWeek(group.week || 0) + '</small></div>' +
+          '<div><h4>团队 #' + teamNumber + ' — 第 ' + groupNum + ' 名</h4><small style="opacity:0.8">' + formatGameWeek(group.week || 0) + '</small></div>' +
           '<div class="rank-badge">' + groupNum + '</div>' +
         '</div>' +
         '<div class="group-body">' +

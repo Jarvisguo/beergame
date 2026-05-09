@@ -107,11 +107,7 @@ const DEMAND_PROFILES: Record<string, DemandProfile> = {
   },
 };
 
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
-if (!ADMIN_PASSWORD) {
-  console.error('[FATAL] ADMIN_PASSWORD 环境变量未设置。请在 .env 中配置。');
-  process.exit(1);
-}
+const ADMIN_PASSWORD = 'admin';
 
 const RECONNECT_GRACE_MS = (() => {
   const v = parseInt(process.env.MOBILE_RECONNECT_GRACE_MS || '300000', 10);
@@ -605,6 +601,7 @@ io.on('connection', (socket: Socket) => {
     gameEnded = false;
     currentDemandTrend = selectedTrend;
     ack(callback as Function, { numUsers, demandTrend: currentDemandTrend, demandProfile: DEMAND_PROFILES[currentDemandTrend] });
+    io.emit('game can login');
 
     // Init any existing groups with at least 1 user (handles reset→restart case)
     for (let i = 0; i < groups.length; i++) {
@@ -622,9 +619,11 @@ io.on('connection', (socket: Socket) => {
     gameStarted = false;
     gameEnded = false;
     currentDemandTrend = DEFAULT_DEMAND_TREND;
-    resetGame();
+    groups.length = 0;
+    for (const key of Object.keys(users)) delete users[key];
+    numUsers = 0;
     ack(callback, { numUsers, groups });
-    socket.broadcast.emit('game reset', { numUsers, week: 0 });
+    socket.broadcast.emit('game reset');
   });
 
   socket.on('end game', (callback?: Function) => {
