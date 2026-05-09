@@ -175,9 +175,9 @@ socket.on('update table', (msg) => {
 socket.on('update group', (msg) => {
   gameGroup[msg.groupNum] = msg.groupData;
   refreshTable(gameGroup, true);
-  const g = $('#chartGroup').value;
+  const g = parseInt($('#chartGroup').value);
   const t = $('#chartType').value;
-  if (g !== undefined) drawChart(parseInt(g), t);
+  if (!isNaN(g)) drawChart(g, t);
 });
 
 // ── Admin Login ───────────────────────────────────────────────────────

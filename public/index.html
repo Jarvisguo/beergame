@@ -137,6 +137,7 @@
   <!-- Lobby -->
   <div class="panel" id="lobby">
     <div class="panel-head">团队成员</div>
+    <p id="lobbyHint" style="margin:8px 0 12px;color:var(--clr-muted);font-size:14px;">等待其他成员加入，凑满 4 人后游戏自动开始。</p>
     <table class="table" id="groupTable">
       <thead><tr><th>#</th><th>用户名</th><th>角色</th><th>牛鞭效应</th></tr></thead>
       <tbody id="groupTbody">
@@ -148,9 +149,6 @@
     </table>
   </div>
 </div>
-
-<script src="/socket.io/socket.io.js"></script>
-<script src="game.js"></script>
 
 <!-- Bullwhip Info Modal -->
 <div class="modal-overlay" id="bullwhipModal" hidden>
@@ -172,5 +170,8 @@
     </div>
   </div>
 </div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="game.js?v=2"></script>
 </body>
 </html>

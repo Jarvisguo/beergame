@@ -327,6 +327,7 @@ function initGroup(groupIndex: number): void {
     waitingForOrders: g.waitingForOrders,
     demandTrend: g.demandTrend,
     demandProfile: g.demandProfile,
+    users: g.users,
   });
 }
 
@@ -338,7 +339,8 @@ function registerUser(socketId: string, userName: string): UserLookup | null {
   // Reconnect: same username, always allowed (any game state)
   if (users[userName]) {
     const u = users[userName];
-    if (u.socketId && !u.disconnectedAt) return null; // Already active
+    const existingSocket = io.sockets.sockets.get(u.socketId);
+    if (u.socketId && !u.disconnectedAt && existingSocket) return null; // Already active
 
     clearDisconnectTimer(u);
     const g = groups[u.group];
@@ -457,6 +459,7 @@ io.on('connection', (socket: Socket) => {
       addedUser = true;
 
       const g = groups[user.group];
+      log('info', `ack to ${user.name}: group=${user.group} week=${g.week} users=${g.users.length} idx=${user.index}`);
       ack(callback, {
         numUsers,
         idx: user.index,
@@ -469,12 +472,14 @@ io.on('connection', (socket: Socket) => {
 
       socket.join(groupRoom(user.group));
 
-      if (!gameStarted && !gameEnded) {
+      if (!gameEnded) {
         io.to(groupRoom(user.group)).emit('group member joined', { idx: user.index, update: g.users[user.index] });
 
-        const activeCount = g.users.filter(u => u && u.socketId).length;
-        if (activeCount === 4) {
-          io.to(groupRoom(user.group)).emit('group ready');
+        if (!gameStarted) {
+          const activeCount = g.users.filter(u => u && u.socketId).length;
+          if (activeCount === 4) {
+            io.to(groupRoom(user.group)).emit('group ready');
+          }
         }
       }
 

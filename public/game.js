@@ -260,11 +260,9 @@ socket.on('game started', (msg) => {
   curWeek = msg.week; numUsers = msg.numUsers; gameEnded = false;
   curGroup = curGroup || {};
   curGroup.waitingForOrders = msg.waitingForOrders || [];
+  if (msg.users) curGroup.users = msg.users;
 
-  // Refresh curUser from stored group data to ensure correct role display
-  if (curGroup && curGroup.users && curGroup.users[userIdx]) {
-    curUser = curGroup.users[userIdx];
-  }
+  curUser = curGroup.users && curGroup.users[userIdx] ? curGroup.users[userIdx] : curUser;
   myRoleName = curUser ? curUser.role.name : '';
 
   submittedOrder = curGroup.waitingForOrders.indexOf(myRoleName) === -1;
@@ -322,6 +320,8 @@ socket.on('next turn', (msg) => {
     const prevCost = parseFloat($('#cstAmt').textContent) || 0;
 
     // Step 1: Delivery
+    $('#btnDeliver').disabled = false;
+    $('#btnFulfill').disabled = false;
     $('#deliveryFlow').hidden = false;
     if (curUser.role.name === '工厂') {
       $('#deliveryText').innerHTML = '生产线有新货物到达。';
@@ -426,6 +426,7 @@ $('#btnLogin').addEventListener('click', (e) => {
       $('#mainApp').hidden = false;
       $('#userRole').textContent = '您的角色：' + curUser.role.name;
       $('#username').textContent = '已登录：' + curUser.name;
+      updateBoard();
 
       if (msg.reconnected) {
         showToast('欢迎回来，已恢复游戏状态', 3000);
@@ -462,6 +463,13 @@ $('#btnLogin').addEventListener('click', (e) => {
         updateStatus();
         updateGroupTable();
       } else {
+        // week=0: waiting for group to fill up, hide all operation cards
+        $('#deliveryFlow').hidden = true;
+        $('#fulfillFlow').hidden = true;
+        $('#orderFlow').hidden = true;
+        $('#waitingFlow').hidden = true;
+        $('#board').hidden = true;
+        $('#lobby').hidden = false;
         updateStatus();
         updateGroupTable();
       }
@@ -495,6 +503,8 @@ $('#btnOrder').addEventListener('click', (e) => {
 });
 
 $('#btnDeliver').addEventListener('click', () => {
+  if ($('#btnDeliver').disabled) return;
+  $('#btnDeliver').disabled = true;
   $('#deliveryFlow').hidden = true;
   if (curUser && curUser.role) {
     showToast(`已接收来自 ${curUser.role.upstream.name} 的 ${curUser.role.upstream.shipments} 箱货物`);
@@ -502,6 +512,8 @@ $('#btnDeliver').addEventListener('click', () => {
 });
 
 $('#btnFulfill').addEventListener('click', () => {
+  if ($('#btnFulfill').disabled) return;
+  $('#btnFulfill').disabled = true;
   $('#fulfillFlow').hidden = true;
   if (curUser && curUser.role) {
     const shipped = curUser.role.downstream.shipments;
@@ -531,7 +543,8 @@ $('#orderInput').addEventListener('keydown', (e) => {
 $('#btnBullwhipInfo').addEventListener('click', () => {
   $('#bullwhipModal').hidden = false;
 });
-$('#btnBullwhipClose').addEventListener('click', () => {
+$('#btnBullwhipClose').addEventListener('click', (e) => {
+  e.stopPropagation();
   $('#bullwhipModal').hidden = true;
 });
 $('#bullwhipModal').addEventListener('click', (e) => {
