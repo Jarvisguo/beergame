@@ -660,6 +660,10 @@ io.on('connection', (socket: Socket) => {
       return ack(callback, { err: '团队未找到。' });
     }
 
+    if (g.week === 0) {
+      return ack(callback, { err: '等待其他玩家加入，游戏尚未开始。' });
+    }
+
     if (g.week > MAX_WEEKS) {
       return ack(callback, { err: `游戏已完成 ${MAX_WEEKS} 周，不再接受订单。` });
     }
@@ -679,7 +683,7 @@ io.on('connection', (socket: Socket) => {
       g.waitingForOrders.splice(idx, 1);
     }
 
-    if (g.waitingForOrders.length === 0) {
+    if (g.waitingForOrders.length === 0 && g.users.length === 4) {
       ack(callback);
       advanceTurn(user.group);
     } else {
