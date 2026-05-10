@@ -122,7 +122,7 @@ function refreshTable(groups, gameStarted) {
 
   gameGroup = groups;
   window.gameGroup = gameGroup;
-  try { sessionStorage.setItem('beerGameGroup', JSON.stringify(gameGroup)); } catch (e) { /* ignore */ }
+  try { localStorage.setItem('beerGameGroup', JSON.stringify(gameGroup)); } catch (e) { /* ignore */ }
   updateAdminStatus();
 }
 
@@ -130,7 +130,7 @@ function refreshTable(groups, gameStarted) {
 socket.on('update table', (msg) => {
   gameGroup = msg.groups;
   window.gameGroup = gameGroup;
-  try { sessionStorage.setItem('beerGameGroup', JSON.stringify(gameGroup)); } catch (e) { /* */ }
+  try { localStorage.setItem('beerGameGroup', JSON.stringify(gameGroup)); } catch (e) { /* */ }
   refreshTable(gameGroup, adminGameStarted);
 });
 
@@ -149,7 +149,7 @@ $('#btnAdmin').addEventListener('click', () => {
       $('#adminLogin').hidden = true;
       gameGroup = msg.groups;
       window.gameGroup = gameGroup;
-      try { sessionStorage.setItem('beerGameGroup', JSON.stringify(gameGroup)); } catch (e) { /* */ }
+      try { localStorage.setItem('beerGameGroup', JSON.stringify(gameGroup)); } catch (e) { /* */ }
       $('#demandTrend').value = msg.demandTrend || 'mixed';
       $('#groupPanel').hidden = false;
 

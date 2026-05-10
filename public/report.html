@@ -153,10 +153,10 @@
   }
 
   function generateReport() {
-    // Try to get gameGroup from sessionStorage (set by admin.js)
+    // Try to get gameGroup from localStorage (set by admin.js)
     var gameGroupData = null;
     try {
-      var stored = sessionStorage.getItem('beerGameGroup');
+      var stored = localStorage.getItem('beerGameGroup');
       if (stored) {
         gameGroupData = JSON.parse(stored);
       }
@@ -407,7 +407,7 @@
 
   function tryGenerateReport() {
     var stored = null;
-    try { stored = sessionStorage.getItem('beerGameGroup'); } catch(e) {}
+    try { stored = localStorage.getItem('beerGameGroup'); } catch(e) {}
     var parsed = null;
     try { parsed = stored ? JSON.parse(stored) : null; } catch(e) {}
 
@@ -426,7 +426,7 @@
     setTimeout(tryGenerateReport, 500);
   };
 
-  // Auto-refresh when admin.js updates sessionStorage in another tab
+  // Auto-refresh when admin.js updates localStorage in another tab
   window.addEventListener('storage', function(e) {
     if (e.key === 'beerGameGroup' && e.newValue) {
       try {
