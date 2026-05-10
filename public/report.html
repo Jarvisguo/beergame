@@ -401,11 +401,42 @@
     document.getElementById('insightText').textContent = insight;
   }
 
-  // Auto-generate on load
+  // Auto-generate on load — retry if data not yet available
+  var reportRetries = 0;
+  var maxRetries = 10;
+
+  function tryGenerateReport() {
+    var stored = null;
+    try { stored = sessionStorage.getItem('beerGameGroup'); } catch(e) {}
+    var parsed = null;
+    try { parsed = stored ? JSON.parse(stored) : null; } catch(e) {}
+
+    if (parsed && parsed.length > 0) {
+      generateReport();
+    } else if (reportRetries < maxRetries) {
+      reportRetries++;
+      setTimeout(tryGenerateReport, 800);
+    } else {
+      document.getElementById('groupsContainer').innerHTML =
+        '<p style="text-align:center;color:#888;padding:40px;">暂无游戏数据。请先在管理端开始游戏并运营至少1周，然后<a href="javascript:location.reload()" style="color:#2c5f7a;">刷新此页面</a>。</p>';
+    }
+  }
+
   window.onload = function() {
-    // Wait a bit for admin.js to load game data
-    setTimeout(generateReport, 500);
+    setTimeout(tryGenerateReport, 500);
   };
+
+  // Auto-refresh when admin.js updates sessionStorage in another tab
+  window.addEventListener('storage', function(e) {
+    if (e.key === 'beerGameGroup' && e.newValue) {
+      try {
+        var data = JSON.parse(e.newValue);
+        if (data && data.length > 0) {
+          generateReport();
+        }
+      } catch(err) {}
+    }
+  });
 </script>
 </body>
 </html>

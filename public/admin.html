@@ -19,6 +19,7 @@
       <button class="btn btn-primary" id="btnStartGame">开始游戏</button>
       <button class="btn btn-danger" id="btnEndGame" hidden>结束游戏</button>
       <button class="btn btn-outline" id="btnResetGame" hidden>重置</button>
+      <button class="btn btn-outline" id="btnFillAI">🤖 AI 补位</button>
       <button class="btn btn-outline" id="btnReport">经营报告</button>
     </div>
   </div>
@@ -64,6 +65,30 @@
     </div>
     <div class="modal-footer">
       <button class="btn btn-primary btn-block" id="btnAdmin">登录</button>
+    </div>
+  </div>
+</div>
+
+<!-- Agent Config Modal -->
+<div class="modal-overlay" id="agentModal" hidden>
+  <div class="modal-box">
+    <div class="modal-header"><h3>🤖 AI 代理配置</h3></div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="label">队伍：<span id="agentGroupLabel"></span>，角色：<span id="agentRoleLabel"></span></label>
+      </div>
+      <div class="form-group">
+        <label class="label" for="agentStrategy">策略</label>
+        <select class="input" id="agentStrategy">
+          <option value="default">平衡型 (default)</option>
+          <option value="conservative">保守型 (conservative)</option>
+          <option value="aggressive">激进型 (aggressive)</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" id="btnAgentCancel">取消</button>
+      <button class="btn btn-primary" id="btnAgentConfirm">指派 AI</button>
     </div>
   </div>
 </div>
