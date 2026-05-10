@@ -4,6 +4,11 @@ export interface Role {
   downstream: { name: string; orders: number; shipments: number };
 }
 
+export interface AgentConfig {
+  strategy: string;
+  params: Record<string, number>;
+}
+
 export interface GameUser {
   name: string;
   socketId?: string;
@@ -17,6 +22,7 @@ export interface GameUser {
   backlogHistory: number[];
   costHistory: number[];
   orderHistory: number[];
+  agent?: AgentConfig;
 }
 
 export interface UserLookup {

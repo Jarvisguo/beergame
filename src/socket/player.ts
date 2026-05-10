@@ -11,6 +11,8 @@ import {
   RECONNECT_GRACE_MS,
 } from '../config.js';
 import { log, groupRoom, ack } from '../utils.js';
+import { computeOrder, resolveParams } from '../agent/strategies.js';
+import type { StrategyName } from '../agent/strategies.js';
 
 function initGroup(io: Server, groupIndex: number): void {
   const g = state.groups[groupIndex];
@@ -39,6 +41,50 @@ function initGroup(io: Server, groupIndex: number): void {
     demandProfile: g.demandProfile,
     users: g.users,
   });
+}
+
+export function scheduleAgentSubmissions(io: Server, groupIndex: number): void {
+  const g = state.groups[groupIndex];
+  if (!g || g.waitingForOrders.length === 0) return;
+
+  for (let i = 0; i < g.users.length; i++) {
+    const user = g.users[i];
+    if (!user.agent) continue;
+    if (!g.waitingForOrders.includes(user.role.name)) continue;
+
+    const params = resolveParams(user.agent.strategy as StrategyName, user.agent.params);
+    const delay = params.submitDelay;
+
+    setTimeout(() => {
+      const freshGroup = state.groups[groupIndex];
+      if (!freshGroup || freshGroup.week !== g.week) return;
+      const freshUser = freshGroup.users[i];
+      if (!freshUser || !freshUser.agent) return;
+      if (!freshGroup.waitingForOrders.includes(freshUser.role.name)) return;
+
+      const order = computeOrder(freshUser, freshGroup, freshUser.agent!.strategy as StrategyName, params);
+
+      freshUser.role.upstream.orders = order;
+      const idx = freshGroup.waitingForOrders.indexOf(freshUser.role.name);
+      if (idx !== -1) freshGroup.waitingForOrders.splice(idx, 1);
+
+      io.to(groupRoom(groupIndex)).emit('update order wait', freshGroup.waitingForOrders);
+
+      if (freshGroup.waitingForOrders.length === 0) {
+        const emitFn: EmitFn = (target, event, data, id) => {
+          if (target === 'socket' && id) {
+            io.to(id).emit(event, data);
+          } else if (target === 'room') {
+            io.to(groupRoom(groupIndex)).emit(event, data);
+          } else if (target === 'admins') {
+            io.to('admins').emit(event, data);
+          }
+        };
+        advanceTurn(freshGroup, groupIndex, emitFn);
+        scheduleAgentSubmissions(io, groupIndex);
+      }
+    }, delay);
+  }
 }
 
 export function registerPlayerHandlers(io: Server, socket: Socket): void {
@@ -85,6 +131,7 @@ export function registerPlayerHandlers(io: Server, socket: Socket): void {
 
     if (state.gameStarted && !state.gameEnded && g.week === 0 && g.users.length === 4) {
       initGroup(io, user.group);
+      scheduleAgentSubmissions(io, user.group);
     } else if (state.gameStarted && !state.gameEnded && g.week > 0 && !isReconnect) {
       socket.emit('game started', {
         week: g.week,
@@ -161,6 +208,7 @@ export function registerPlayerHandlers(io: Server, socket: Socket): void {
         }
       };
       advanceTurn(g, user.group, emitFn);
+      scheduleAgentSubmissions(io, user.group);
     } else {
       ack(callback, g.waitingForOrders);
       io.to(groupRoom(user.group)).emit('update order wait', g.waitingForOrders);

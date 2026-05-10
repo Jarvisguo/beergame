@@ -5,10 +5,15 @@ import {
   DEMAND_PROFILES,
   DEFAULT_DEMAND_TREND,
   STARTING_THROUGHPUT,
+  STARTING_INVENTORY,
   BEER_NAMES,
 } from '../config.js';
-import { log, groupRoom, ack, clearDisconnectTimer } from '../utils.js';
+import { log, groupRoom, ack, clearDisconnectTimer, deepClone, makeRole } from '../utils.js';
 import { normalizeTrend } from '../game/demand.js';
+import { scheduleAgentSubmissions } from './player.js';
+import { resolveParams } from '../agent/strategies.js';
+import type { StrategyName } from '../agent/strategies.js';
+import type { GameUser, AgentConfig } from '../types.js';
 
 // initGroup is duplicated here to avoid a circular dependency with player.ts.
 // Both modules need it but neither should own the other.
@@ -94,6 +99,7 @@ export function registerAdminHandlers(io: Server, socket: Socket): void {
     for (let i = 0; i < state.groups.length; i++) {
       if (state.groups[i].users.length > 0 && state.groups[i].week === 0) {
         initGroup(io, i);
+        scheduleAgentSubmissions(io, i);
       }
     }
   });
@@ -164,5 +170,106 @@ export function registerAdminHandlers(io: Server, socket: Socket): void {
       numUsers: state.numUsers,
       groups: state.groups,
     });
+  });
+
+  socket.on('add agent', (msg: {
+    groupIndex: number;
+    roleIndex: number;
+    strategy?: string;
+    params?: Record<string, number>;
+  }, callback?: Function) => {
+    const { groupIndex, roleIndex, strategy, params } = msg;
+
+    if (roleIndex < 0 || roleIndex > 3) return ack(callback, { err: '无效角色索引。' });
+
+    // Auto-create group if it doesn't exist
+    if (!state.groups[groupIndex]) {
+      const trend = state.currentDemandTrend;
+      const profile = deepClone(DEMAND_PROFILES[trend] ?? DEMAND_PROFILES[DEFAULT_DEMAND_TREND]);
+      state.groups[groupIndex] = {
+        week: 0,
+        cost: 0,
+        users: [],
+        waitingForOrders: [],
+        demandTrend: trend,
+        demandProfile: profile,
+        shipping: [],
+        mailing: [],
+        costHistory: [],
+        ready: false,
+      };
+    }
+
+    const g = state.groups[groupIndex];
+    const existing = g.users[roleIndex];
+    if (existing && existing.socketId) {
+      return ack(callback, { err: '该角色当前有在线玩家，无法指派 AI。' });
+    }
+
+    const agentConfig: AgentConfig = {
+      strategy: strategy || 'default',
+      params: params || {},
+    };
+
+    if (existing) {
+      existing.agent = agentConfig;
+    } else {
+      const userName = `AI-${['零售商','批发商','区域仓库','工厂'][roleIndex]}-G${groupIndex + 1}`;
+      const role = deepClone(makeRole(roleIndex));
+      const newUser: GameUser = {
+        name: userName,
+        cost: 0,
+        inventory: STARTING_INVENTORY,
+        backlog: 0,
+        role,
+        inventoryHistory: [],
+        backlogHistory: [],
+        costHistory: [],
+        orderHistory: [],
+        agent: agentConfig,
+      };
+      g.users[roleIndex] = newUser;
+    }
+
+    if (g.users.length === 4 && g.week === 0 && state.gameStarted && !state.gameEnded) {
+      initGroup(io, groupIndex);
+      scheduleAgentSubmissions(io, groupIndex);
+    } else if (g.week > 0 && state.gameStarted && !state.gameEnded) {
+      scheduleAgentSubmissions(io, groupIndex);
+    }
+
+    io.to('admins').emit('update table', { numUsers: state.numUsers, groups: state.groups });
+    ack(callback, { ok: true });
+  });
+
+  socket.on('remove agent', (msg: { groupIndex: number; roleIndex: number }, callback?: Function) => {
+    const { groupIndex, roleIndex } = msg;
+    const g = state.groups[groupIndex];
+
+    if (!g) return ack(callback, { err: '团队不存在。' });
+    const user = g.users[roleIndex];
+    if (!user || !user.agent) return ack(callback, { err: '该角色没有 AI 代理。' });
+
+    delete user.agent;
+
+    if (!user.socketId) {
+      g.users[roleIndex] = undefined as unknown as GameUser;
+    }
+
+    io.to('admins').emit('update table', { numUsers: state.numUsers, groups: state.groups });
+    ack(callback, { ok: true });
+  });
+
+  socket.on('list agents', (callback?: Function) => {
+    const agents: Array<{ groupIndex: number; roleIndex: number; name: string; strategy: string }> = [];
+    for (let gi = 0; gi < state.groups.length; gi++) {
+      for (let ri = 0; ri < state.groups[gi].users.length; ri++) {
+        const u = state.groups[gi].users[ri];
+        if (u && u.agent) {
+          agents.push({ groupIndex: gi, roleIndex: ri, name: u.name, strategy: u.agent.strategy });
+        }
+      }
+    }
+    ack(callback, agents);
   });
 }

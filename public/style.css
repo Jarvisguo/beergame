@@ -149,6 +149,8 @@ table { border-collapse: collapse; width: 100%; }
 .tag-red { background: #fee2e2; color: #991b1b; }
 .tag-blue { background: #dbeafe; color: #1e40af; }
 .tag-gray { background: #f1f5f9; color: #475569; }
+.tag-agent { background: #e0e7ff; color: #4338ca; font-size: 0.75rem; }
+.tag-disc { background: #fee2e2; color: #991b1b; font-size: 0.75rem; }
 
 /* ── Info button ─────────────────────────────────────────────────────── */
 .btn-info-sm {

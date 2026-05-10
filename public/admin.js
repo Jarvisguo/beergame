@@ -18,6 +18,7 @@ const socket = io(undefined, {
 let gameGroup = [];
 let adminGameStarted = false;
 let adminGameEnded = false;
+let agentTarget = null; // { groupIndex, roleIndex }
 
 // Expose for report page
 window.gameGroup = gameGroup;
@@ -73,10 +74,23 @@ function refreshTable(groups, gameStarted) {
       if (g.users[j]) {
         totalInv += g.users[j].inventory || 0;
         totalBack += g.users[j].backlog || 0;
-        const disc = g.users[j].socketId ? '' : '（已断开）';
-        html += `<td>${g.users[j].name}${disc}</td>`;
+        const u = g.users[j];
+        let badge = '';
+        if (u.agent) {
+          badge = ` <span class="tag tag-agent" title="AI: ${u.agent.strategy}">🤖</span>`;
+        } else if (!u.socketId) {
+          badge = ' <span class="tag tag-disc">已断开</span>';
+        }
+        const btn = (!u.socketId && !u.agent && adminGameStarted && !adminGameEnded)
+          ? ` <button class="btn btn-sm btn-outline btnAgentAssign" data-group="${i}" data-role="${j}">+AI</button>`
+          : (u.agent ? ` <button class="btn btn-sm btn-outline btnAgentRemove" data-group="${i}" data-role="${j}">✕</button>` : '');
+        html += `<td>${u.name}${badge}${btn}</td>`;
       } else {
-        html += '<td></td>';
+        if (adminGameStarted && !adminGameEnded) {
+          html += `<td><button class="btn btn-sm btn-outline btnAgentAssign" data-group="${i}" data-role="${j}">+AI</button></td>`;
+        } else {
+          html += '<td></td>';
+        }
       }
     }
 
@@ -260,3 +274,58 @@ function rankGroups() {
 
   refreshTable(gameGroup, true);
 }
+
+// ── AI Agent Management ────────────────────────────────────────────────
+$('#btnFillAI').addEventListener('click', () => {
+  if (!adminGameStarted || adminGameEnded) return;
+  gameGroup.forEach((g, gi) => {
+    if (g.week > MAX_WEEKS) return;
+    for (let ri = 0; ri < 4; ri++) {
+      const u = g.users[ri];
+      if (!u || (!u.socketId && !u.agent)) {
+        socket.emit('add agent', { groupIndex: gi, roleIndex: ri, strategy: 'default', params: {} });
+      }
+    }
+  });
+});
+
+$('#adminTbody').addEventListener('click', (e) => {
+  const assignBtn = e.target.closest('.btnAgentAssign');
+  const removeBtn = e.target.closest('.btnAgentRemove');
+
+  if (assignBtn) {
+    agentTarget = {
+      groupIndex: parseInt(assignBtn.getAttribute('data-group')),
+      roleIndex: parseInt(assignBtn.getAttribute('data-role')),
+    };
+    const g = gameGroup[agentTarget.groupIndex];
+    const roleNames = ['零售商', '批发商', '区域仓库', '工厂'];
+    $('#agentGroupLabel').textContent = '队伍 ' + (agentTarget.groupIndex + 1);
+    $('#agentRoleLabel').textContent = roleNames[agentTarget.roleIndex];
+    $('#agentModal').hidden = false;
+  }
+
+  if (removeBtn) {
+    const gi = parseInt(removeBtn.getAttribute('data-group'));
+    const ri = parseInt(removeBtn.getAttribute('data-role'));
+    socket.emit('remove agent', { groupIndex: gi, roleIndex: ri });
+  }
+});
+
+$('#btnAgentCancel').addEventListener('click', () => {
+  $('#agentModal').hidden = true;
+  agentTarget = null;
+});
+
+$('#btnAgentConfirm').addEventListener('click', () => {
+  if (!agentTarget) return;
+  const strategy = $('#agentStrategy').value || 'default';
+  socket.emit('add agent', {
+    groupIndex: agentTarget.groupIndex,
+    roleIndex: agentTarget.roleIndex,
+    strategy,
+    params: {},
+  });
+  $('#agentModal').hidden = true;
+  agentTarget = null;
+});
