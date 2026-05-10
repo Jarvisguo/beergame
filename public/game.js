@@ -167,14 +167,32 @@ function updateAnalytics() {
   }
 }
 
-// ── Waiting ───────────────────────────────────────────────────────────
-function updateWait(list) {
-  if (list && list.length && submittedOrder) {
-    const names = list.join('、');
-    $('#waitingText').innerHTML = `您的订单已提交。等待 <strong>${names}</strong> 提交。`;
-    $('#waitingFlow').hidden = false;
-  } else if (!list || list.length === 0) {
-    $('#waitingFlow').hidden = true;
+// ── Flow state machine ────────────────────────────────────────────────
+function setFlowState(state, data = {}) {
+  const card = $('#flowCard');
+  if (!card) return;
+  card.dataset.flowState = state;
+
+  if (state === 'lobby') {
+    if (data.text) $('#lobbySubText').textContent = data.text;
+  } else if (state === 'waiting-turn') {
+    const week = data.week || curWeek;
+    $('#turnTitle').textContent = `第 ${week} 周结果`;
+    if (data.delivery != null) $('#resultDelivery').textContent = `+${data.delivery} 箱（来自 ${data.upstreamName || '上游'}）`;
+    if (data.shipped != null)   $('#resultShipped').textContent  = `${data.shipped} 箱 → ${data.downstreamName || '下游'}`;
+    if (data.inventory != null) $('#resultInventory').textContent = `${data.inventory} 箱`;
+    if (data.upstreamName)      $('#orderText').innerHTML = `现在向 <strong>${data.upstreamName}</strong> 订货：`;
+    $('#orderInput').value = '';
+    $('#orderInput').disabled = false;
+    $('#btnOrder').disabled = false;
+    setTimeout(() => $('#orderInput').focus(), 100);
+  } else if (state === 'waiting-others') {
+    const names = data.waiting && data.waiting.length ? data.waiting.join('、') : '';
+    $('#waitingOthersText').innerHTML = names
+      ? `已提交订单。还在等：<strong>${names}</strong>`
+      : '已提交订单，等待其他人...';
+    $('#orderInput').disabled = true;
+    $('#btnOrder').disabled = true;
   }
 }
 
@@ -215,9 +233,7 @@ function resetUI() {
   curWeek = 0; curUser = null; numUsers = 0; userIdx = 0;
   curGroup = null; gameEnded = false; submittedOrder = false;
 
-  $('#flowArea').querySelectorAll('.flow-card').forEach(el => el.hidden = true);
-  $('#btnDeliver').disabled = true;
-  $('#btnFulfill').disabled = true;
+  setFlowState('lobby', { text: '等待其他成员加入...' });
   $('#btnOrder').disabled = true;
   $('#orderInput').disabled = true;
   $('#board').hidden = true;
@@ -277,20 +293,15 @@ socket.on('game started', (msg) => {
   $('#weekInfo').hidden = false;
   $('#weekNum').textContent = `第 ${msg.week} 周`;
 
-  // Show order form if my role is waiting
   if (submittedOrder) {
-    $('#orderFlow').hidden = true;
-    $('#btnOrder').disabled = true;
-    $('#orderInput').disabled = true;
+    setFlowState('waiting-others', { waiting: curGroup.waitingForOrders });
   } else {
-    $('#orderFlow').hidden = false;
-    $('#btnOrder').disabled = false;
-    $('#orderInput').disabled = false;
-    $('#orderInput').value = '';
+    setFlowState('waiting-turn', {
+      week: msg.week,
+      upstreamName: curUser ? curUser.role.upstream.name : '',
+      downstreamName: curUser ? curUser.role.downstream.name : '',
+    });
   }
-  $('#deliveryFlow').hidden = true;
-  $('#fulfillFlow').hidden = true;
-  $('#waitingFlow').hidden = submittedOrder;
 });
 
 socket.on('next turn', (msg) => {
@@ -303,17 +314,9 @@ socket.on('next turn', (msg) => {
 
   if (msg.week > MAX_WEEKS) {
     submittedOrder = true;
-    $('#orderFlow').hidden = true;
-    $('#btnOrder').disabled = true;
-    $('#orderInput').disabled = true;
-    $('#orderInput').value = '已结束';
-    $('#waitingText').innerHTML = `已完成 ${MAX_WEEKS} 周，停止运营`;
-    $('#waitingFlow').hidden = false;
+    setFlowState('completed');
   } else if (submittedOrder) {
-    $('#orderFlow').hidden = true;
-    $('#btnOrder').disabled = true;
-    $('#orderInput').disabled = true;
-    updateWait(msg.waitingForOrders);
+    setFlowState('waiting-others', { waiting: msg.waitingForOrders });
   }
 
   // Trigger turn flow animations
@@ -323,28 +326,24 @@ socket.on('next turn', (msg) => {
     const upstreamDelivery = newUser.role.upstream.shipments;
     const prevCost = parseFloat($('#cstAmt').textContent) || 0;
 
-    // Step 1: Delivery
-    $('#btnDeliver').disabled = false;
-    $('#btnFulfill').disabled = false;
-    $('#deliveryFlow').hidden = false;
-    if (curUser.role.name === '工厂') {
-      $('#deliveryText').innerHTML = '生产线有新货物到达。';
-    } else {
-      $('#deliveryText').innerHTML = `来自 <strong>${curUser.role.upstream.name}</strong> 的新货物到达。`;
-    }
     animateNum($('#usShpAmt'), 0, upstreamDelivery);
     animateNum($('#inventoryAmt'), prevInventory, prevInventory + upstreamDelivery);
-
-    // Step 2: Fulfill
-    $('#fulfillFlow').hidden = false;
-    $('#fulfillText').innerHTML = `<strong>${curUser.role.downstream.name}</strong> 正在等待订单。`;
     animateNum($('#dsOrdrAmt'), newUser.role.downstream.orders, 0);
     animateNum($('#dsShpAmt'), 0, newUser.role.downstream.shipments);
     animateNum($('#inventoryAmt'), prevInventory + upstreamDelivery, newUser.inventory);
     animateNum($('#bklgAmt'), curUser.backlog, newUser.backlog);
-
-    // Cost animation
     animateNum($('#cstAmt'), prevCost, newUser.cost, 0);
+
+    if (msg.week <= MAX_WEEKS && !submittedOrder) {
+      setFlowState('waiting-turn', {
+        week: msg.week,
+        delivery: upstreamDelivery,
+        shipped: newUser.role.downstream.shipments,
+        inventory: newUser.inventory,
+        upstreamName: curUser.role.upstream.name,
+        downstreamName: curUser.role.downstream.name,
+      });
+    }
   }
 
   nextTurn(msg.numUsers, msg.week, msg.update);
@@ -360,14 +359,16 @@ socket.on('game ended', (msg) => {
   $('#lobby').hidden = false;
   $('#board').hidden = true;
   $('#analytics').hidden = false;
-  $('#flowArea').querySelectorAll('.flow-card').forEach(el => el.hidden = true);
+  setFlowState('ended');
   updateGroupTable();
   updateStatus();
 });
 
 socket.on('update order wait', (list) => {
   if (curGroup) curGroup.waitingForOrders = list;
-  updateWait(list);
+  if (submittedOrder) {
+    setFlowState('waiting-others', { waiting: list });
+  }
 });
 
 socket.on('group ready', () => {
@@ -444,36 +445,32 @@ $('#btnLogin').addEventListener('click', (e) => {
         nextTurn(numUsers, curWeek, curUser);
         if (hasCompleted()) {
           submittedOrder = true;
-          $('#orderInput').value = '已结束';
-          $('#btnOrder').disabled = true;
-          $('#orderInput').disabled = true;
-          $('#waitingText').innerHTML = `已完成 ${MAX_WEEKS} 周，停止运营`;
-          $('#waitingFlow').hidden = false;
+          setFlowState('completed');
         } else if (curGroup.waitingForOrders.indexOf(myRoleName) === -1) {
           submittedOrder = true;
-          $('#btnOrder').disabled = true;
-          $('#orderInput').disabled = true;
-          $('#orderInput').value = curUser.role.upstream.orders;
-          updateWait(curGroup.waitingForOrders);
+          setFlowState('waiting-others', { waiting: curGroup.waitingForOrders });
         } else {
           submittedOrder = false;
-          $('#btnOrder').disabled = false;
-          $('#orderInput').disabled = false;
-          $('#orderFlow').hidden = false;
+          setFlowState('waiting-turn', {
+            week: curWeek,
+            delivery: curUser.role.upstream.shipments,
+            shipped: curUser.role.downstream.shipments,
+            inventory: curUser.inventory,
+            upstreamName: curUser.role.upstream.name,
+            downstreamName: curUser.role.downstream.name,
+          });
         }
         $('#board').hidden = false;
         $('#lobby').hidden = true;
       } else if (gameEnded) {
+        setFlowState('ended');
         updateStatus();
         updateGroupTable();
       } else {
-        // week=0: waiting for group to fill up, hide all operation cards
-        $('#deliveryFlow').hidden = true;
-        $('#fulfillFlow').hidden = true;
-        $('#orderFlow').hidden = true;
-        $('#waitingFlow').hidden = true;
-        $('#btnDeliver').disabled = true;
-        $('#btnFulfill').disabled = true;
+        // week=0: waiting for group to fill up
+        setFlowState('lobby', { text: '等待其他成员加入...' });
+        $('#btnOrder').disabled = true;
+        $('#orderInput').disabled = true;
         $('#btnOrder').disabled = true;
         $('#orderInput').disabled = true;
         $('#board').hidden = true;
@@ -501,42 +498,11 @@ $('#btnOrder').addEventListener('click', (e) => {
       return;
     }
     submittedOrder = true;
-    $('#btnOrder').disabled = true;
-    $('#orderInput').disabled = true;
-    $('#orderFlow').hidden = true;
     if (curGroup && resp) {
       curGroup.waitingForOrders = resp;
     }
+    setFlowState('waiting-others', { waiting: curGroup ? curGroup.waitingForOrders : [] });
   });
-});
-
-$('#btnDeliver').addEventListener('click', () => {
-  if ($('#btnDeliver').disabled) return;
-  $('#btnDeliver').disabled = true;
-  $('#deliveryFlow').hidden = true;
-  if (curUser && curUser.role) {
-    showToast(`已接收来自 ${curUser.role.upstream.name} 的 ${curUser.role.upstream.shipments} 箱货物`);
-  }
-});
-
-$('#btnFulfill').addEventListener('click', () => {
-  if ($('#btnFulfill').disabled) return;
-  $('#btnFulfill').disabled = true;
-  $('#fulfillFlow').hidden = true;
-  if (curUser && curUser.role) {
-    const shipped = curUser.role.downstream.shipments;
-    const backlog = curUser.backlog;
-    const msg = backlog > 0
-      ? `已向 ${curUser.role.downstream.name} 发货 ${shipped} 箱，仍有 ${backlog} 箱积压`
-      : `已向 ${curUser.role.downstream.name} 发货 ${shipped} 箱 ✓`;
-    showToast(msg);
-    $('#orderText').innerHTML = `现在向 <strong>${curUser.role.upstream.name}</strong> 订货：`;
-  }
-  $('#orderFlow').hidden = false;
-  $('#btnOrder').disabled = false;
-  $('#orderInput').disabled = false;
-  $('#orderInput').value = '';
-  $('#orderInput').focus();
 });
 
 // Enter key to submit login

@@ -9,6 +9,7 @@
  * TC-06: 第0周不可操作，4人到齐自动进入第1周
  * TC-07: Socket事件接口验证 (E1-E7)
  * TC-08: player rejoined 事件验证 (E3)
+ * TC-10: AI补位触发第1周，game started事件包含完整操作数据
  */
 
 const assert = require('assert');
@@ -588,6 +589,68 @@ async function tc09_reportDataAfterTwoWeeks() {
   }
 }
 
+// ── TC-10 ──────────────────────────────────────────────────────────────────
+// 场景：1名玩家登录（week=0），管理员用 add agent 补满剩余3个角色，
+// 服务端自动调用 initGroup，广播 game started (week=1)。
+// 验证：玩家收到的 game started 事件包含 week=1、完整的 waitingForOrders 和 users，
+// 使客户端能正确启用"接收货物"和"完成订单"按钮。
+//
+// 注意：btnDeliver/btnFulfill 的启用逻辑是纯前端行为，无法在 socket 层测试。
+// 本测试验证服务端发送的 game started payload 包含所有必要字段，
+// 确认 bug 根因在前端 game.js 的 game started 处理器未启用这两个按钮。
+async function tc10_agentFillTriggersGameStartedWithFullPayload() {
+  const admin = await connect();
+  const player = await connect();
+  try {
+    await emit(admin, 'submit password', ADMIN_PASSWORD);
+    await emit(admin, 'start game');
+
+    // 1名玩家登录，week=0
+    const reg = await emit(player, 'submit username', 'tc10-player');
+    assert.strictEqual(reg.group.week, 0, 'TC-10: week should be 0 after 1 player joins');
+
+    // 监听 game started 事件（在 add agent 之前注册）
+    const startedPromise = once(player, 'game started', 5000);
+
+    // 管理员补入3个 AI，最后一个触发 initGroup
+    await emit(admin, 'add agent', { groupIndex: 0, roleIndex: 1 });
+    await emit(admin, 'add agent', { groupIndex: 0, roleIndex: 2 });
+    await emit(admin, 'add agent', { groupIndex: 0, roleIndex: 3 });
+
+    const started = await startedPromise;
+
+    // 验证 week=1
+    assert.strictEqual(started.week, 1,
+      'TC-10: game started event should have week=1');
+
+    // 验证 waitingForOrders 包含全部4个角色（客户端据此判断订单按钮状态）
+    assert.deepStrictEqual(started.waitingForOrders, EXPECTED_ROLES,
+      'TC-10: game started should include all 4 roles in waitingForOrders');
+
+    // 验证 users 数组存在且有4个成员（客户端据此更新 board 和 flow cards）
+    assert.ok(Array.isArray(started.users) && started.users.length === 4,
+      'TC-10: game started should include users array with 4 members');
+
+    // 验证玩家自己的角色数据完整（inventory、role.upstream/downstream 是启用按钮的前提）
+    const myUser = started.users[0];
+    assert.ok(myUser, 'TC-10: users[0] (the human player) should exist');
+    assert.ok(myUser.role && myUser.role.upstream && myUser.role.downstream,
+      'TC-10: player role should have upstream and downstream');
+    assert.ok(typeof myUser.inventory === 'number',
+      'TC-10: player should have inventory');
+
+    // 验证玩家此时可以提交订单（说明游戏已真正进入第1周）
+    const orderResult = await emit(player, 'submit order', 4);
+    assert.ok(!orderResult || !orderResult.err,
+      'TC-10: player should be able to submit order after game started');
+
+    console.log('  TC-10 PASS: agent fill triggers game started with full payload; player can submit order');
+  } finally {
+    admin.close();
+    player.close();
+  }
+}
+
 // ── Runner ──────────────────────────────────────────────────────────────────
 async function runIsolated(name, testFn) {
   const server = spawn(process.execPath, ['index.js'], {
@@ -630,6 +693,7 @@ async function main() {
   await runIsolated('TC-07', tc07_eventInterfacesNormalFlow);
   await runIsolated('TC-08', tc08_playerRejoinedEvent);
   await runIsolated('TC-09', tc09_reportDataAfterTwoWeeks);
+  await runIsolated('TC-10', tc10_agentFillTriggersGameStartedWithFullPayload);
   console.log('all reconnect-takeover tests passed');
 }
 

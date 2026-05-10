@@ -51,33 +51,71 @@
 
   <!-- Flow Area -->
   <div class="flow-area" id="flowArea">
-    <div class="flow-card flow-waiting" id="waitingFlow">
-      <div class="flow-icon">⏳</div>
-      <div class="flow-body" id="waitingText">等待其他玩家提交订单...</div>
-    </div>
-    <div class="flow-card flow-delivery" id="deliveryFlow" hidden>
-      <div class="flow-icon">📦</div>
-      <div class="flow-body">
-        <strong id="deliveryText">您有一个新货物。</strong>
-        <button class="btn btn-sm btn-act" id="btnDeliver">接收货物</button>
-      </div>
-    </div>
-    <div class="flow-card flow-fulfill" id="fulfillFlow" hidden>
-      <div class="flow-icon">🚚</div>
-      <div class="flow-body">
-        <strong id="fulfillText">客户正在等待订单。</strong>
-        <button class="btn btn-sm btn-act" id="btnFulfill">完成订单</button>
-      </div>
-    </div>
-    <div class="flow-card flow-order" id="orderFlow" hidden>
-      <div class="flow-icon">📝</div>
-      <div class="flow-body">
-        <strong id="orderText">是时候订货了。</strong>
-        <div class="order-form">
-          <input type="number" id="orderInput" class="input input-sm" placeholder="数量" min="0" inputmode="numeric" pattern="[0-9]*" enterkeyhint="done">
-          <button class="btn btn-sm btn-primary" id="btnOrder">下单</button>
+    <div class="flow-card" id="flowCard" data-flow-state="lobby">
+
+      <!-- state: lobby -->
+      <div class="flow-state" data-state="lobby">
+        <div class="flow-icon">👥</div>
+        <div class="flow-body">
+          <strong>等待游戏开始</strong>
+          <span class="flow-sub" id="lobbySubText">等待其他成员加入...</span>
         </div>
       </div>
+
+      <!-- state: waiting-turn -->
+      <div class="flow-state" data-state="waiting-turn">
+        <div class="flow-icon">📋</div>
+        <div class="flow-body">
+          <strong id="turnTitle">第 N 周结果</strong>
+          <div class="flow-result-rows">
+            <div class="flow-result-row">
+              <span class="flow-result-label">📦 收到货物</span>
+              <span class="flow-result-val" id="resultDelivery">—</span>
+            </div>
+            <div class="flow-result-row">
+              <span class="flow-result-label">🚚 向下游发货</span>
+              <span class="flow-result-val" id="resultShipped">—</span>
+            </div>
+            <div class="flow-result-row">
+              <span class="flow-result-label">📊 当前库存</span>
+              <span class="flow-result-val" id="resultInventory">—</span>
+            </div>
+          </div>
+          <strong id="orderText">现在向上游订货：</strong>
+          <div class="order-form">
+            <input type="number" id="orderInput" class="input input-sm" placeholder="数量" min="0" inputmode="numeric" pattern="[0-9]*" enterkeyhint="done">
+            <button class="btn btn-sm btn-primary" id="btnOrder">提交订单</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- state: waiting-others -->
+      <div class="flow-state" data-state="waiting-others">
+        <div class="flow-icon">⏳</div>
+        <div class="flow-body">
+          <strong>等待其他玩家</strong>
+          <span class="flow-sub" id="waitingOthersText">已提交订单，等待其他人...</span>
+        </div>
+      </div>
+
+      <!-- state: completed -->
+      <div class="flow-state" data-state="completed">
+        <div class="flow-icon">✅</div>
+        <div class="flow-body">
+          <strong>游戏完成</strong>
+          <span class="flow-sub">已完成 26 周，查看下方分析报告。</span>
+        </div>
+      </div>
+
+      <!-- state: ended -->
+      <div class="flow-state" data-state="ended">
+        <div class="flow-icon">🏁</div>
+        <div class="flow-body">
+          <strong>游戏已结束</strong>
+          <span class="flow-sub">管理员已结束游戏。</span>
+        </div>
+      </div>
+
     </div>
   </div>
 
