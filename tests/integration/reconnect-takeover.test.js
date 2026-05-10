@@ -14,6 +14,7 @@
 const assert = require('assert');
 const { spawn } = require('child_process');
 const { io } = require('socket.io-client');
+const http = require('http');
 
 const PORT = Number(process.env.TEST_PORT || 3211);
 const BASE_URL = `http://127.0.0.1:${PORT}`;
@@ -460,6 +461,133 @@ async function tc08_playerRejoinedEvent() {
   }
 }
 
+// ── TC-09 ──────────────────────────────────────────────────────────────────
+async function tc09_reportDataAfterTwoWeeks() {
+  const admin = await connect();
+  const players = [];
+  try {
+    await emit(admin, 'submit password', ADMIN_PASSWORD);
+    await emit(admin, 'start game');
+
+    for (let i = 0; i < 4; i++) {
+      players.push(await connect());
+    }
+    const startedEvents = players.map(s => once(s, 'game started'));
+    for (let i = 0; i < 4; i++) {
+      await emit(players[i], 'submit username', `tc09-${i + 1}`);
+    }
+    await Promise.all(startedEvents);
+
+    // Week 1: submit orders
+    const turn1Events = players.map(s => once(s, 'next turn'));
+    await emit(players[0], 'submit order', 5);
+    await emit(players[1], 'submit order', 6);
+    await emit(players[2], 'submit order', 7);
+    await emit(players[3], 'submit order', 8);
+    await Promise.all(turn1Events);
+
+    // Week 2: submit orders
+    const turn2Events = players.map(s => once(s, 'next turn'));
+    await emit(players[0], 'submit order', 3);
+    await emit(players[1], 'submit order', 10);
+    await emit(players[2], 'submit order', 4);
+    await emit(players[3], 'submit order', 12);
+    await Promise.all(turn2Events);
+
+    // ── Verify report.html is accessible ──────────────────────────────
+    const reportStatus = await new Promise((resolve, reject) => {
+      http.get(`${BASE_URL}/report.html`, res => {
+        res.resume();
+        res.on('end', () => resolve(res.statusCode));
+      }).on('error', reject);
+    });
+    assert.strictEqual(reportStatus, 200, 'Report: /report.html should return 200');
+
+    // ── Get game state (what sessionStorage would contain) ────────────
+    const adminState = await emit(admin, 'submit password', ADMIN_PASSWORD);
+    const gameGroup = adminState.groups;
+    assert.ok(gameGroup && gameGroup.length > 0, 'Report: should have at least 1 group');
+    assert.strictEqual(gameGroup.length, 1, 'Report: should have exactly 1 group');
+
+    const g = gameGroup[0];
+    assert.strictEqual(g.week, 3, 'Report: week should be 3 after 2 rounds');
+
+    // ── Simulate report generation logic ──────────────────────────────
+
+    // Global stats
+    const totalPlayers = gameGroup.reduce((a, grp) => a + grp.users.length, 0);
+    assert.strictEqual(totalPlayers, 4, 'Report: totalPlayers should be 4');
+
+    const allCosts = gameGroup.filter(grp => grp.cost > 0).map(grp => grp.cost);
+    assert.ok(allCosts.length > 0, 'Report: should have group costs > 0');
+
+    const allWeeks = Math.max(...gameGroup.map(grp => grp.week));
+    assert.strictEqual(allWeeks, 3, 'Report: max week should be 3');
+
+    // Per-group: cost & costHistory
+    assert.ok(g.cost > 0, 'Report: group total cost should be > 0');
+    assert.strictEqual(g.costHistory.length, 2, 'Report: costHistory should have 2 entries');
+
+    // Per-user: report metrics
+    for (let i = 0; i < g.users.length; i++) {
+      const u = g.users[i];
+
+      // Identity
+      assert.ok(u.name, `Report: user ${i} should have name`);
+      assert.ok(u.role && u.role.name, `Report: user ${i} should have role name`);
+
+      // Final state
+      assert.ok(typeof u.cost === 'number' && u.cost > 0,
+        `Report: user ${i} should have accumulated cost`);
+      assert.ok(typeof u.inventory === 'number',
+        `Report: user ${i} should have inventory`);
+      assert.ok(typeof u.backlog === 'number',
+        `Report: user ${i} should have backlog`);
+
+      // Histories (2 weeks completed)
+      assert.strictEqual(u.orderHistory.length, 2,
+        `Report: user ${i} orderHistory length should be 2`);
+      assert.strictEqual(u.inventoryHistory.length, 2,
+        `Report: user ${i} inventoryHistory length should be 2`);
+      assert.strictEqual(u.backlogHistory.length, 2,
+        `Report: user ${i} backlogHistory length should be 2`);
+      assert.strictEqual(u.costHistory.length, 2,
+        `Report: user ${i} costHistory length should be 2`);
+
+      // Order history values are positive numbers
+      const orders = u.orderHistory.filter(x => typeof x === 'number' && !isNaN(x));
+      assert.ok(orders.length >= 1, `Report: user ${i} should have valid orders`);
+      assert.ok(orders.every(o => o > 0),
+        `Report: user ${i} all orders should be positive`);
+
+      // Calculate report metrics (mean, stdDev, CV, bullwhip)
+      const mean = orders.reduce((a, b) => a + b, 0) / orders.length;
+      assert.ok(mean > 0, `Report: user ${i} mean order should be > 0`);
+
+      const variance = orders.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / orders.length;
+      const stdDev = Math.sqrt(variance);
+      assert.ok(stdDev >= 0, `Report: user ${i} stdDev should be non-negative`);
+
+      const cv = mean > 0 ? stdDev / mean : 0;
+      assert.ok(typeof cv === 'number', `Report: user ${i} CV should be a number`);
+
+      // Bullwhip classification (same logic as report.html)
+      const cls = cv < 0.1 ? '稳定' : cv < 0.3 ? '波动' : '剧烈';
+      assert.ok(['稳定', '波动', '剧烈'].includes(cls),
+        `Report: user ${i} bullwhip class should be valid: ${cls}`);
+    }
+
+    // Cost ranking (same logic as report.html)
+    const sortedCosts = [...allCosts].sort((a, b) => a - b);
+    assert.ok(sortedCosts[0] > 0, 'Report: lowest cost should be > 0');
+
+    console.log('  TC-09 PASS: report.html loads, data pipeline complete, metrics calculable');
+  } finally {
+    admin.close();
+    players.forEach(s => s && s.close());
+  }
+}
+
 // ── Runner ──────────────────────────────────────────────────────────────────
 async function runIsolated(name, testFn) {
   const server = spawn(process.execPath, ['index.js'], {
@@ -501,6 +629,7 @@ async function main() {
   await runIsolated('TC-06', tc06_week0NoOpAutoAdvanceOnFull);
   await runIsolated('TC-07', tc07_eventInterfacesNormalFlow);
   await runIsolated('TC-08', tc08_playerRejoinedEvent);
+  await runIsolated('TC-09', tc09_reportDataAfterTwoWeeks);
   console.log('all reconnect-takeover tests passed');
 }
 

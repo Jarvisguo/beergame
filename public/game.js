@@ -216,6 +216,10 @@ function resetUI() {
   curGroup = null; gameEnded = false; submittedOrder = false;
 
   $('#flowArea').querySelectorAll('.flow-card').forEach(el => el.hidden = true);
+  $('#btnDeliver').disabled = true;
+  $('#btnFulfill').disabled = true;
+  $('#btnOrder').disabled = true;
+  $('#orderInput').disabled = true;
   $('#board').hidden = true;
   $('#analytics').hidden = true;
   $('#weekInfo').hidden = true;
@@ -468,6 +472,10 @@ $('#btnLogin').addEventListener('click', (e) => {
         $('#fulfillFlow').hidden = true;
         $('#orderFlow').hidden = true;
         $('#waitingFlow').hidden = true;
+        $('#btnDeliver').disabled = true;
+        $('#btnFulfill').disabled = true;
+        $('#btnOrder').disabled = true;
+        $('#orderInput').disabled = true;
         $('#board').hidden = true;
         $('#lobby').hidden = false;
         updateStatus();
