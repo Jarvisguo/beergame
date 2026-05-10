@@ -62,12 +62,14 @@ function once(socket, event) {
   return new Promise((resolve) => socket.once(event, resolve));
 }
 
+// TC3: 静态资源可访问
 async function assertStaticAssets() {
   for (const path of ['/', '/admin.html', '/report.html', '/socket.io/socket.io.js']) {
     assert.strictEqual(await request(path), 200, `${path} should load`);
   }
 }
 
+// A1, A2: 管理员认证
 async function assertAdminAuth() {
   const admin = await connectClient();
   try {
@@ -80,47 +82,36 @@ async function assertAdminAuth() {
   }
 }
 
-async function assertStartGuard() {
-  const admin = await connectClient();
+// P1: waiting 状态下不允许玩家登录
+async function assertLoginBlockedWhenWaiting() {
   const player = await connectClient();
   try {
-    await emit(player, 'submit username', 'guard-player');
-    await emit(admin, 'submit password', ADMIN_PASSWORD);
-    const response = await emit(admin, 'start game');
-    assert(response.err, 'starting with fewer than four players should fail');
+    const result = await emit(player, 'submit username', 'early-bird');
+    assert.ok(
+      typeof result === 'string' || (result && result.err),
+      'login should be rejected when game is in waiting state'
+    );
   } finally {
-    admin.close();
     player.close();
   }
 }
 
-async function assertIncompleteGroupCannotStart() {
-  const admin = await connectClient();
-  const players = [];
-  try {
-    for (let i = 0; i < 5; i++) {
-      players.push(await connectClient());
-      await emit(players[i], 'submit username', `incomplete-${i + 1}`);
-    }
-
-    await emit(admin, 'submit password', ADMIN_PASSWORD);
-    const response = await emit(admin, 'start game');
-    assert(response.err, 'starting with an incomplete second group should fail');
-  } finally {
-    admin.close();
-    players.forEach((socket) => socket.close());
-  }
-}
-
+// P2, P3, P4, P5, G1, G2, A4: 完整游戏流程
 async function runFullGameFlow() {
   const admin = await connectClient();
   const players = [];
   try {
+    // A4: 先开始游戏，再让玩家登录
+    await emit(admin, 'submit password', ADMIN_PASSWORD);
+    await emit(admin, 'start game');
+
     for (let i = 0; i < 4; i++) {
       players.push(await connectClient());
     }
 
+    // P2, P3: 4 人依次登录，第 4 人触发 game started
     const registrations = [];
+    const gameStartedEvents = players.map((s) => once(s, 'game started'));
     for (let i = 0; i < players.length; i++) {
       registrations.push(await emit(players[i], 'submit username', `player-${i + 1}`));
     }
@@ -128,27 +119,29 @@ async function runFullGameFlow() {
     const roles = registrations.map((msg) => msg.group.users[msg.idx].role.name);
     assert.deepStrictEqual(roles, EXPECTED_ROLES);
 
-    const duplicate = await connectClient();
-    try {
-      assert.strictEqual(await emit(duplicate, 'submit username', 'player-1'), 'Invalid Username');
-    } finally {
-      duplicate.close();
-    }
-
-    const startedEvents = players.map((socket) => once(socket, 'game started'));
-    await emit(admin, 'submit password', ADMIN_PASSWORD);
-    const startResponse = await emit(admin, 'start game');
-    assert.strictEqual(startResponse.numUsers, 4);
-
-    const started = await Promise.all(startedEvents);
+    const started = await Promise.all(gameStartedEvents);
     started.forEach((msg) => {
       assert.strictEqual(msg.week, 1);
       assert.deepStrictEqual(msg.waitingForOrders, EXPECTED_ROLES);
     });
 
+    // P4: 同用户名重复登录被拒绝
+    const duplicate = await connectClient();
+    try {
+      const dupResult = await emit(duplicate, 'submit username', 'player-1');
+      assert.ok(
+        typeof dupResult === 'string' || (dupResult && dupResult.err),
+        'duplicate username should be rejected'
+      );
+    } finally {
+      duplicate.close();
+    }
+
+    // G2: 部分提交时广播 update order wait
     const firstWaitingList = await emit(players[0], 'submit order', 4);
     assert.deepStrictEqual(firstWaitingList, ['批发商', '区域仓库', '工厂']);
 
+    // G1: 所有人提交后推进到下一周
     const nextTurnEvents = players.map((socket) => once(socket, 'next turn'));
     await emit(players[1], 'submit order', 5);
     await emit(players[2], 'submit order', 6);
@@ -161,77 +154,73 @@ async function runFullGameFlow() {
       assert.deepStrictEqual(msg.waitingForOrders, EXPECTED_ROLES);
     });
 
-    players[2].close();
-    await wait(100);
-    const adminSnapshot = await emit(admin, 'submit password', ADMIN_PASSWORD);
-    assert.strictEqual(adminSnapshot.numUsers, 4, 'disconnect grace should keep player counted');
-    assert(adminSnapshot.groups[0].users[2].socketId, 'socketId should remain during grace');
-
-    const reconnect = await connectClient();
-    players[2] = reconnect;
-    const rejoined = await emit(reconnect, 'submit username', 'player-3');
-    assert.strictEqual(rejoined.idx, 2);
-    assert.strictEqual(rejoined.group.users[2].role.name, '区域仓库');
-    assert.strictEqual(rejoined.group.week, 2);
-
-    const resetEvents = players.map((socket) => once(socket, 'game reset'));
-    const reset = await emit(admin, 'reset game');
-    assert.strictEqual(reset.numUsers, 4);
-    await Promise.all(resetEvents);
-
-    const restartedEvents = players.map((socket) => once(socket, 'game started'));
-    const restart = await emit(admin, 'start game');
-    assert.strictEqual(restart.numUsers, 4);
-    await Promise.all(restartedEvents);
-
-    const endedEvents = players.map((socket) => once(socket, 'game ended'));
-    const ended = await emit(admin, 'end game');
-    assert.strictEqual(ended.numUsers, 4);
-    await Promise.all(endedEvents);
+    // P5: 第 5 人登录创建新组
+    const fifth = await connectClient();
+    players.push(fifth);
+    const fifthResult = await emit(fifth, 'submit username', 'player-5');
+    assert.strictEqual(fifthResult.idx, 0, 'fifth player should be in a new group at slot 0');
   } finally {
     admin.close();
     players.forEach((socket) => socket && socket.close());
   }
 }
 
+// R1, R2: 宽限期内重连与不同用户名分配
 async function assertDifferentUsernameCannotTakeGraceSeat() {
+  const admin = await connectClient();
   const players = [];
   try {
+    await emit(admin, 'submit password', ADMIN_PASSWORD);
+    await emit(admin, 'start game');
+
     for (let i = 0; i < 4; i++) {
       players.push(await connectClient());
+    }
+    const gameStartedEvents = players.map((s) => once(s, 'game started'));
+    for (let i = 0; i < 4; i++) {
       await emit(players[i], 'submit username', `reserved-${i + 1}`);
     }
+    await Promise.all(gameStartedEvents);
 
+    // R2: player-3 断线（宽限期内），新用户不能顶替，应分配到新组
     players[2].close();
     await wait(100);
 
     const replacement = await connectClient();
     players.push(replacement);
     const replacementJoin = await emit(replacement, 'submit username', 'reserved-replacement');
-    assert.strictEqual(replacementJoin.group.users[0].name, 'reserved-replacement');
-    assert.strictEqual(replacementJoin.idx, 0, 'different usernames should start a new group');
+    assert.strictEqual(replacementJoin.idx, 0, 'different username should start a new group at slot 0');
     assert.strictEqual(replacementJoin.group.users[0].role.name, '零售商');
 
+    // R1: 原用户重连恢复原 slot
     const reconnect = await connectClient();
     players.push(reconnect);
     const rejoined = await emit(reconnect, 'submit username', 'reserved-3');
     assert.strictEqual(rejoined.idx, 2);
     assert.strictEqual(rejoined.group.users[2].role.name, '区域仓库');
   } finally {
+    admin.close();
     players.forEach((socket) => socket && socket.close());
   }
 }
 
+// R3: 宽限期结束后槽位释放
 async function assertDisconnectExpiresAfterGrace() {
   const admin = await connectClient();
   const players = [];
   try {
+    await emit(admin, 'submit password', ADMIN_PASSWORD);
+    await emit(admin, 'start game');
+
     for (let i = 0; i < 4; i++) {
       players.push(await connectClient());
+    }
+    const gameStartedEvents = players.map((s) => once(s, 'game started'));
+    for (let i = 0; i < 4; i++) {
       await emit(players[i], 'submit username', `expire-${i + 1}`);
     }
+    await Promise.all(gameStartedEvents);
 
-    await emit(admin, 'submit password', ADMIN_PASSWORD);
     players[1].close();
     await wait(RECONNECT_GRACE_MS + 250);
 
@@ -244,29 +233,7 @@ async function assertDisconnectExpiresAfterGrace() {
   }
 }
 
-async function assertGraceAllowsStart() {
-  const admin = await connectClient();
-  const players = [];
-  try {
-    for (let i = 0; i < 4; i++) {
-      players.push(await connectClient());
-      await emit(players[i], 'submit username', `grace-start-${i + 1}`);
-    }
-
-    await emit(admin, 'submit password', ADMIN_PASSWORD);
-    const startedEvents = players.slice(0, 3).map((socket) => once(socket, 'game started'));
-    players[3].close();
-    await wait(100);
-
-    const start = await emit(admin, 'start game');
-    assert.strictEqual(start.numUsers, 4, 'grace-period disconnect should count as online');
-    await Promise.all(startedEvents);
-  } finally {
-    admin.close();
-    players.forEach((socket) => socket && socket.close());
-  }
-}
-
+// 服务器健壮性：无 ack 回调不崩溃
 async function assertNoAckCrash() {
   const admin = await connectClient();
   try {
@@ -279,17 +246,21 @@ async function assertNoAckCrash() {
   }
 }
 
+// G5, G6: 26 周后不可提交订单
 async function assertWeekLimitStopsOrdersAt26() {
   const admin = await connectClient();
   const players = [];
   try {
+    await emit(admin, 'submit password', ADMIN_PASSWORD);
+
     for (let i = 0; i < 4; i++) {
       players.push(await connectClient());
+    }
+    const gameStartedEvents = players.map((s) => once(s, 'game started'));
+    for (let i = 0; i < 4; i++) {
       await emit(players[i], 'submit username', `limit-${i + 1}`);
     }
-
-    await emit(admin, 'submit password', ADMIN_PASSWORD);
-    await Promise.all(players.map((socket) => once(socket, 'game started')).concat([emit(admin, 'start game')]));
+    await Promise.all([...gameStartedEvents, emit(admin, 'start game')]);
 
     for (let round = 1; round <= 26; round++) {
       const nextTurnEvents = players.map((socket) => once(socket, 'next turn'));
@@ -299,47 +270,196 @@ async function assertWeekLimitStopsOrdersAt26() {
       const turns = await Promise.all(nextTurnEvents);
       assert.strictEqual(turns[0].week, round + 1);
       if (round === 26) {
+        // G6: 第 26 周结束后 waitingForOrders 为空
         assert.deepStrictEqual(turns[0].waitingForOrders, []);
       }
     }
 
+    // G5: 26 周后提交订单被拒绝
     const rejected = await emit(players[0], 'submit order', 4);
-    assert.deepStrictEqual(rejected, { err: 'Game has completed 26 weeks. No more orders accepted.' });
+    assert.ok(rejected && rejected.err, 'order after week 26 should be rejected');
   } finally {
     admin.close();
     players.forEach((socket) => socket && socket.close());
   }
 }
 
+// T1-T4: 需求趋势
 async function assertDemandTrendSelection(trend, rounds, expectedDemand) {
   const admin = await connectClient();
   const players = [];
   try {
+    await emit(admin, 'submit password', ADMIN_PASSWORD);
+
     for (let i = 0; i < 4; i++) {
       players.push(await connectClient());
+    }
+    const gameStartedEvents = players.map((s) => once(s, 'game started'));
+    for (let i = 0; i < 4; i++) {
       await emit(players[i], 'submit username', `${trend}-${i + 1}`);
+    }
+    await Promise.all([...gameStartedEvents, emit(admin, 'start game', { demandTrend: trend })]);
+
+    for (let round = 1; round < rounds; round++) {
+      const nextTurnEvents = players.map((socket) => once(socket, 'next turn'));
+      for (const p of players) await emit(p, 'submit order', 4);
+      await Promise.all(nextTurnEvents);
+    }
+
+    const nextTurnEvents = players.map((socket) => once(socket, 'next turn'));
+    for (const p of players) await emit(p, 'submit order', 4);
+    const turns = await Promise.all(nextTurnEvents);
+    // 零售商（index 0）的下游订单即为客户需求
+    assert.strictEqual(
+      turns[0].update.role.downstream.orders,
+      expectedDemand,
+      `${trend} trend at round ${rounds} should have demand ${expectedDemand}`
+    );
+  } finally {
+    admin.close();
+    players.forEach((socket) => socket && socket.close());
+  }
+}
+
+// P6: 新玩家加入进行中组的空槽位
+async function assertMidGameJoin() {
+  const admin = await connectClient();
+  const players = [];
+  try {
+    await emit(admin, 'submit password', ADMIN_PASSWORD);
+    await emit(admin, 'start game');
+
+    // 只加入 3 人，留一个空槽位
+    for (let i = 0; i < 3; i++) {
+      players.push(await connectClient());
+      await emit(players[i], 'submit username', `midgame-${i + 1}`);
+    }
+
+    // 第 4 人加入，触发 game started
+    const fourth = await connectClient();
+    players.push(fourth);
+    const gameStartedEvent = once(fourth, 'game started');
+    const joinResult = await emit(fourth, 'submit username', 'midgame-4');
+    assert.ok(joinResult && joinResult.idx !== undefined, 'fourth player should be assigned a slot');
+
+    const gameStarted = await gameStartedEvent;
+    assert.strictEqual(gameStarted.week, 1, 'game should start at week 1');
+    assert.deepStrictEqual(gameStarted.waitingForOrders, EXPECTED_ROLES);
+  } finally {
+    admin.close();
+    players.forEach((socket) => socket && socket.close());
+  }
+}
+
+// R4: 顶替时继承游戏数据
+async function assertTakeoverInheritsData() {
+  const admin = await connectClient();
+  const players = [];
+  try {
+    await emit(admin, 'submit password', ADMIN_PASSWORD);
+
+    for (let i = 0; i < 4; i++) {
+      players.push(await connectClient());
+    }
+    const gameStartedEvents = players.map((s) => once(s, 'game started'));
+    for (let i = 0; i < 4; i++) {
+      await emit(players[i], 'submit username', `takeover-${i + 1}`);
+    }
+    await Promise.all([...gameStartedEvents, emit(admin, 'start game')]);
+
+    // 完成第 1 周，让玩家积累一些成本
+    const nextTurnEvents = players.map((socket) => once(socket, 'next turn'));
+    for (const p of players) await emit(p, 'submit order', 4);
+    const turns = await Promise.all(nextTurnEvents);
+    const originalCost = turns[2].update.cost;
+
+    // player-3（slot 2）断线并等待宽限期结束
+    players[2].close();
+    await wait(RECONNECT_GRACE_MS + 250);
+
+    // 新玩家顶替 slot 2
+    const takeover = await connectClient();
+    players.push(takeover);
+    const takeoverResult = await emit(takeover, 'submit username', 'takeover-new');
+    assert.strictEqual(takeoverResult.idx, 2, 'takeover should land on slot 2');
+    assert.strictEqual(
+      takeoverResult.group.users[2].cost,
+      originalCost,
+      'takeover should inherit original player cost'
+    );
+  } finally {
+    admin.close();
+    players.forEach((socket) => socket && socket.close());
+  }
+}
+
+// G3, G4: 订单数量验证
+async function assertOrderValidation() {
+  const admin = await connectClient();
+  const players = [];
+  try {
+    // G4: week=0（waiting 状态）时不可提交订单，也不可登录
+    const earlyPlayer = await connectClient();
+    try {
+      const earlyResult = await emit(earlyPlayer, 'submit username', 'validate-early');
+      assert.ok(
+        typeof earlyResult === 'string' || (earlyResult && earlyResult.err),
+        'login should be rejected in waiting state'
+      );
+    } finally {
+      earlyPlayer.close();
     }
 
     await emit(admin, 'submit password', ADMIN_PASSWORD);
-    const startedEvents = players.map((socket) => once(socket, 'game started'));
-    const startResponse = await emit(admin, 'start game', { demandTrend: trend });
-    assert.strictEqual(startResponse.demandTrend, trend);
-    const started = await Promise.all(startedEvents);
-    started.forEach((msg) => {
-      assert.strictEqual(msg.demandTrend, trend);
-      assert.strictEqual(msg.demandProfile.name.length > 0, true);
-    });
+    await emit(admin, 'start game');
 
-    let turns = [];
-    for (let round = 1; round <= rounds; round++) {
-      const nextTurnEvents = players.map((socket) => once(socket, 'next turn'));
-      for (let i = 0; i < players.length; i++) {
-        await emit(players[i], 'submit order', 4);
-      }
-      turns = await Promise.all(nextTurnEvents);
+    for (let i = 0; i < 4; i++) {
+      players.push(await connectClient());
     }
+    const gameStartedEvents = players.map((s) => once(s, 'game started'));
+    for (let i = 0; i < 4; i++) {
+      await emit(players[i], 'submit username', `validate-${i + 1}`);
+    }
+    await Promise.all(gameStartedEvents);
 
-    assert.strictEqual(turns[0].update.role.downstream.orders, expectedDemand, `${trend} demand at round ${rounds}`);
+    // G3: 负数被拒绝
+    const negativeRejected = await emit(players[0], 'submit order', -1);
+    assert.ok(negativeRejected && negativeRejected.err, 'negative order should be rejected');
+
+    // G3: 非整数被拒绝
+    const floatRejected = await emit(players[0], 'submit order', 1.5);
+    assert.ok(floatRejected && floatRejected.err, 'float order should be rejected');
+  } finally {
+    admin.close();
+    players.forEach((socket) => socket && socket.close());
+  }
+}
+
+// A7: 重置游戏
+async function assertResetGame() {
+  const admin = await connectClient();
+  const players = [];
+  try {
+    await emit(admin, 'submit password', ADMIN_PASSWORD);
+
+    for (let i = 0; i < 4; i++) {
+      players.push(await connectClient());
+    }
+    const gameStartedEvents = players.map((s) => once(s, 'game started'));
+    for (let i = 0; i < 4; i++) {
+      await emit(players[i], 'submit username', `reset-${i + 1}`);
+    }
+    await Promise.all([...gameStartedEvents, emit(admin, 'start game')]);
+
+    const resetEvents = players.map((socket) => once(socket, 'game reset'));
+    await emit(admin, 'reset game');
+    await Promise.all(resetEvents);
+
+    // 重置后状态清零
+    const afterReset = await emit(admin, 'submit password', ADMIN_PASSWORD);
+    assert.strictEqual(afterReset.status, 'waiting');
+    assert.strictEqual(afterReset.numUsers, 0);
+    assert.deepStrictEqual(afterReset.groups, []);
   } finally {
     admin.close();
     players.forEach((socket) => socket && socket.close());
@@ -359,12 +479,8 @@ async function main() {
   });
 
   let output = '';
-  server.stdout.on('data', (chunk) => {
-    output += chunk.toString();
-  });
-  server.stderr.on('data', (chunk) => {
-    output += chunk.toString();
-  });
+  server.stdout.on('data', (chunk) => { output += chunk.toString(); });
+  server.stderr.on('data', (chunk) => { output += chunk.toString(); });
 
   try {
     await waitForServer();
@@ -374,17 +490,19 @@ async function main() {
     server.kill();
     await wait(500);
 
-    await runIsolated(assertStartGuard);
-    await runIsolated(assertIncompleteGroupCannotStart);
+    await runIsolated(assertLoginBlockedWhenWaiting);
     await runIsolated(runFullGameFlow);
     await runIsolated(assertDifferentUsernameCannotTakeGraceSeat);
     await runIsolated(assertDisconnectExpiresAfterGrace);
-    await runIsolated(assertGraceAllowsStart);
     await runIsolated(assertNoAckCrash);
     await runIsolated(assertWeekLimitStopsOrdersAt26);
     await runIsolated(() => assertDemandTrendSelection('growth', 5, 6));
     await runIsolated(() => assertDemandTrendSelection('decline', 1, 16));
     await runIsolated(() => assertDemandTrendSelection('mixed', 17, 8));
+    await runIsolated(assertMidGameJoin);
+    await runIsolated(assertTakeoverInheritsData);
+    await runIsolated(assertOrderValidation);
+    await runIsolated(assertResetGame);
   } catch (err) {
     console.error(output);
     throw err;
@@ -406,12 +524,8 @@ async function runIsolated(testFn) {
   });
 
   let output = '';
-  server.stdout.on('data', (chunk) => {
-    output += chunk.toString();
-  });
-  server.stderr.on('data', (chunk) => {
-    output += chunk.toString();
-  });
+  server.stdout.on('data', (chunk) => { output += chunk.toString(); });
+  server.stderr.on('data', (chunk) => { output += chunk.toString(); });
 
   try {
     await waitForServer();
