@@ -39,6 +39,7 @@ function initGroup(io: Server, groupIndex: number): void {
   g.week = 1;
   io.to(groupRoom(groupIndex)).emit('game started', {
     week: 1,
+    numUsers: state.numUsers,
     waitingForOrders: g.waitingForOrders,
     demandTrend: g.demandTrend,
     demandProfile: g.demandProfile,
@@ -102,6 +103,11 @@ export function registerAdminHandlers(io: Server, socket: Socket): void {
         scheduleAgentSubmissions(io, i);
       }
     }
+
+    io.to('admins').emit('update table', {
+      numUsers: state.numUsers,
+      groups: state.groups,
+    });
   });
 
   socket.on('end game', (callback?: Function) => {

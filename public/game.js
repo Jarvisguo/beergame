@@ -98,7 +98,8 @@ function updateBoard() {
 // ── Status ────────────────────────────────────────────────────────────
 function updateStatus() {
   let txt;
-  const n = numUsers === 1 ? '当前有 1 名参与者。' : `当前有 ${numUsers} 名参与者。`;
+  const count = Number.isFinite(numUsers) ? numUsers : 0;
+  const n = count === 1 ? '当前有 1 名参与者。' : `当前有 ${count} 名参与者。`;
   if (curWeek > 0 && !gameEnded) {
     if (hasCompleted()) {
       txt = `游戏已完成 ${MAX_WEEKS} 周。${n}`;
@@ -177,7 +178,8 @@ function setFlowState(state, data = {}) {
     if (data.text) $('#lobbySubText').textContent = data.text;
   } else if (state === 'waiting-turn') {
     const week = data.week || curWeek;
-    $('#turnTitle').textContent = `第 ${week} 周结果`;
+    const resultWeek = Math.max(0, week - 1);
+    $('#turnTitle').textContent = `第 ${resultWeek} 周结果`;
     if (data.delivery != null) $('#resultDelivery').textContent = `+${data.delivery} 箱（来自 ${data.upstreamName || '上游'}）`;
     if (data.shipped != null)   $('#resultShipped').textContent  = `${data.shipped} 箱 → ${data.downstreamName || '下游'}`;
     if (data.inventory != null) $('#resultInventory').textContent = `${data.inventory} 箱`;
@@ -222,7 +224,9 @@ function updateGroupTable() {
 
 // ── Next turn ─────────────────────────────────────────────────────────
 function nextTurn(users, week, user) {
-  curUser = user; numUsers = users; curWeek = week;
+  curUser = user;
+  if (typeof users === 'number') numUsers = users;
+  curWeek = week;
   updateStatus(); updateAnalytics(); updateBoard();
   $('#weekNum').textContent = hasCompleted() ? `已完成 ${MAX_WEEKS} 周` : `第 ${week} 周`;
   $('#weekInfo').hidden = false;
@@ -277,7 +281,9 @@ socket.on('group member left', (msg) => {
 });
 
 socket.on('game started', (msg) => {
-  curWeek = msg.week; numUsers = msg.numUsers; gameEnded = false;
+  curWeek = msg.week;
+  if (typeof msg.numUsers === 'number') numUsers = msg.numUsers;
+  gameEnded = false;
   curGroup = curGroup || {};
   curGroup.waitingForOrders = msg.waitingForOrders || [];
   if (msg.users) curGroup.users = msg.users;

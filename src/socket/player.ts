@@ -36,6 +36,7 @@ function initGroup(io: Server, groupIndex: number): void {
   g.week = 1;
   io.to(groupRoom(groupIndex)).emit('game started', {
     week: 1,
+    numUsers: state.numUsers,
     waitingForOrders: g.waitingForOrders,
     demandTrend: g.demandTrend,
     demandProfile: g.demandProfile,
@@ -135,6 +136,7 @@ export function registerPlayerHandlers(io: Server, socket: Socket): void {
     } else if (state.gameStarted && !state.gameEnded && g.week > 0 && !isReconnect) {
       socket.emit('game started', {
         week: g.week,
+        numUsers: state.numUsers,
         waitingForOrders: g.waitingForOrders,
         demandTrend: g.demandTrend,
         demandProfile: g.demandProfile,

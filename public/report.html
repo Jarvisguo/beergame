@@ -175,8 +175,10 @@
 
     // Calculate global stats
     for (var g = 0; g < gameGroup.length; g++) {
-      totalPlayers += gameGroup[g].users.length;
-      if (gameGroup[g].cost > 0) allCosts.push(gameGroup[g].cost);
+      var users = Array.isArray(gameGroup[g].users) ? gameGroup[g].users.filter(Boolean) : [];
+      var cost = Number(gameGroup[g].cost) || 0;
+      totalPlayers += users.length;
+      allCosts.push(cost);
       if (gameGroup[g].week > allWeeks) allWeeks = gameGroup[g].week;
     }
 
@@ -190,26 +192,28 @@
     var weekSummaryText = gameGroup.map(function(g, i) { return '#' + (i + 1) + ': ' + formatGameWeek(g.week || 0); }).join('；');
     document.getElementById('weekSummary').textContent = weekSummaryText;
 
-    if (allCosts.length > 0) {
-      // Sort groups by cost (lowest first), preserving original index
-      var sortedGroups = JSON.parse(JSON.stringify(gameGroup));
-      for (var i = 0; i < sortedGroups.length; i++) {
-        sortedGroups[i]._originalIndex = i;
-      }
-      sortedGroups.sort(function(a, b) { return a.cost - b.cost; });
+    // Sort groups by cost (lowest first), preserving original index.
+    // Reports should render even before costs become positive.
+    var sortedGroups = JSON.parse(JSON.stringify(gameGroup));
+    for (var i = 0; i < sortedGroups.length; i++) {
+      sortedGroups[i]._originalIndex = i;
+      sortedGroups[i].cost = Number(sortedGroups[i].cost) || 0;
+      sortedGroups[i].users = Array.isArray(sortedGroups[i].users) ? sortedGroups[i].users.filter(Boolean) : [];
+    }
+    sortedGroups.sort(function(a, b) { return a.cost - b.cost; });
 
-      allCosts.sort(function(a, b) { return a - b; });
-      var avg = allCosts.reduce(function(a, b) { return a + b; }, 0) / allCosts.length;
-      var champion = sortedGroups[0];
-      var champNum = (champion._originalIndex !== undefined ? champion._originalIndex : 0) + 1;
-      document.getElementById('bestTeam').textContent = '团队 #' + champNum;
-      document.getElementById('bestCost').textContent = '¥' + Math.round(allCosts[0]);
-      document.getElementById('avgCost').textContent = '¥' + Math.round(avg);
-      document.getElementById('worstCost').textContent = '¥' + Math.round(allCosts[allCosts.length - 1]);
+    allCosts.sort(function(a, b) { return a - b; });
+    var avg = allCosts.reduce(function(a, b) { return a + b; }, 0) / allCosts.length;
+    var champion = sortedGroups[0];
+    var champNum = (champion._originalIndex !== undefined ? champion._originalIndex : 0) + 1;
+    document.getElementById('bestTeam').textContent = '团队 #' + champNum;
+    document.getElementById('bestCost').textContent = '¥' + Math.round(allCosts[0]);
+    document.getElementById('avgCost').textContent = '¥' + Math.round(avg);
+    document.getElementById('worstCost').textContent = '¥' + Math.round(allCosts[allCosts.length - 1]);
 
-      // Generate group cards
-      var allBullwhipScores = [];
-      var html = '';
+    // Generate group cards
+    var allBullwhipScores = [];
+    var html = '';
     for (var rank = 0; rank < sortedGroups.length; rank++) {
       var group = sortedGroups[rank];
       var groupNum = rank + 1;
@@ -294,7 +298,9 @@
       }
       
       // Team bullwhip: max score among all roles
-      var maxBullwhip = Math.max.apply(null, bullwhipData.map(function(d) { return d.bullwhipScore; }));
+      var maxBullwhip = bullwhipData.length > 0
+        ? Math.max.apply(null, bullwhipData.map(function(d) { return d.bullwhipScore; }))
+        : 0;
       allBullwhipScores.push(maxBullwhip);
       
       // Determine bullwhip level
@@ -312,7 +318,9 @@
       }
       
       // Calculate team metrics
-      var maxInventory = Math.max.apply(null, bullwhipData.map(function(d) { return d.finalInventory; }));
+      var maxInventory = bullwhipData.length > 0
+        ? Math.max.apply(null, bullwhipData.map(function(d) { return d.finalInventory; }))
+        : 0;
       var totalBacklog = bullwhipData.reduce(function(a, d) { return a + d.finalBacklog; }, 0);
       var totalCost = bullwhipData.reduce(function(a, d) { return a + d.finalCost; }, 0);
 
@@ -373,7 +381,6 @@
         '<div class="mini-chart">' + barsHtml + '</div>' +
       '</div></div>';
     }
-
     document.getElementById('groupsContainer').innerHTML = html;
 
     // Global bullwhip stats
@@ -389,7 +396,7 @@
     // Key insight
     var best = allCosts[0];
     var worst = allCosts[allCosts.length - 1];
-    var ratio = worst / best;
+    var ratio = best > 0 ? worst / best : (worst > 0 ? Infinity : 1);
     var insight = '';
     if (ratio > 5) {
       insight = '各团队成本差距非常大（' + Math.round(ratio) + '倍），说明供应链协调能力差异显著。冠军团队的成本控制策略值得深入分析。';

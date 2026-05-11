@@ -10,6 +10,7 @@
  * TC-07: Socket事件接口验证 (E1-E7)
  * TC-08: player rejoined 事件验证 (E3)
  * TC-10: AI补位触发第1周，game started事件包含完整操作数据
+ * TC-11: 管理端开始游戏后收到初始化后的团队状态，供报告页缓存使用
  */
 
 const assert = require('assert');
@@ -63,6 +64,22 @@ function once(socket, event, ms = 8000) {
   return new Promise((resolve, reject) => {
     const t = setTimeout(() => reject(new Error(`timeout waiting for '${event}'`)), ms);
     socket.once(event, (...args) => { clearTimeout(t); resolve(...args); });
+  });
+}
+
+function waitForEvent(socket, event, predicate, ms = 8000) {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => {
+      socket.off(event, handler);
+      reject(new Error(`timeout waiting for '${event}'`));
+    }, ms);
+    function handler(payload) {
+      if (!predicate(payload)) return;
+      clearTimeout(t);
+      socket.off(event, handler);
+      resolve(payload);
+    }
+    socket.on(event, handler);
   });
 }
 
@@ -651,6 +668,44 @@ async function tc10_agentFillTriggersGameStartedWithFullPayload() {
   }
 }
 
+async function tc11_adminReceivesInitializedGroupsAfterStartGame() {
+  const admin = await connect();
+  const players = [];
+  try {
+    await emit(admin, 'submit password', ADMIN_PASSWORD);
+    await emit(admin, 'start game');
+
+    for (let i = 0; i < 4; i++) {
+      players.push(await connect());
+    }
+
+    const adminUpdate = waitForEvent(admin, 'update table', (update) =>
+      update.groups && update.groups[0] && update.groups[0].week === 1, 5000);
+    const startedEvents = players.map(s => once(s, 'game started', 5000));
+
+    for (let i = 0; i < 4; i++) {
+      await emit(players[i], 'submit username', `tc11-${i + 1}`);
+    }
+
+    await Promise.all(startedEvents);
+    const update = await adminUpdate;
+
+    assert.ok(update.groups && update.groups.length === 1,
+      'TC-11: admin should receive groups update after start game');
+    assert.strictEqual(update.groups[0].week, 1,
+      'TC-11: admin cached group should be initialized to week 1');
+    assert.deepStrictEqual(update.groups[0].waitingForOrders, EXPECTED_ROLES,
+      'TC-11: admin cached group should include initialized waitingForOrders');
+    assert.ok(Array.isArray(update.groups[0].users[0].orderHistory),
+      'TC-11: admin cached users should include report history arrays');
+
+    console.log('  TC-11 PASS: admin receives initialized state for report cache after start game');
+  } finally {
+    admin.close();
+    players.forEach(s => s && s.close());
+  }
+}
+
 // ── Runner ──────────────────────────────────────────────────────────────────
 async function runIsolated(name, testFn) {
   const server = spawn(process.execPath, ['index.js'], {
@@ -694,6 +749,7 @@ async function main() {
   await runIsolated('TC-08', tc08_playerRejoinedEvent);
   await runIsolated('TC-09', tc09_reportDataAfterTwoWeeks);
   await runIsolated('TC-10', tc10_agentFillTriggersGameStartedWithFullPayload);
+  await runIsolated('TC-11', tc11_adminReceivesInitializedGroupsAfterStartGame);
   console.log('all reconnect-takeover tests passed');
 }
 

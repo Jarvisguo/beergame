@@ -6,6 +6,7 @@ import {
   INVENTORY_COST,
   BACKLOG_COST,
 } from '../config.js';
+import { state } from '../state/store.js';
 import { customerDemand } from './demand.js';
 
 export type EmitFn = (
@@ -81,6 +82,7 @@ export function advanceTurn(g: Group, groupIndex: number, onSocketEmit: EmitFn):
     if (!u.socketId) continue;
     onSocketEmit('socket', 'next turn', {
       week: g.week,
+      numUsers: state.numUsers,
       update: u,
       waitingForOrders: g.waitingForOrders,
     }, u.socketId);
