@@ -74,6 +74,7 @@ assert.strictEqual(elements.bestCost.textContent, '¥0');
 assert.strictEqual(elements.avgCost.textContent, '¥0');
 assert.strictEqual(elements.worstCost.textContent, '¥0');
 assert.match(elements.groupsContainer.innerHTML, /团队 #1/);
+assert.match(elements.groupsContainer.innerHTML, /成员：A、B、C、D/);
 assert.match(elements.groupsContainer.innerHTML, /零售商/);
 assert.doesNotMatch(elements.insightText.textContent, /NaN|Infinity/);
 

@@ -154,6 +154,15 @@
     return '已完成 ' + completedWeeks + ' 轮，当前第 ' + week + ' 周';
   }
 
+  function escapeHtml(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
   function generateReport() {
     // Try to get gameGroup from localStorage (set by admin.js)
     var gameGroupData = null;
@@ -365,9 +374,12 @@
       }
 
       var teamNumber = (group._originalIndex !== undefined ? group._originalIndex : rank) + 1;
+      var memberNames = group.users.map(function(u) {
+        return escapeHtml(u.name || '未命名');
+      }).join('、');
       html += '<div class="group-card group-rank-' + groupNum + '">' +
         '<div class="group-header">' +
-          '<div><h4>团队 #' + teamNumber + ' — 第 ' + groupNum + ' 名</h4><small style="opacity:0.8">' + formatGameWeek(group.week || 0) + '</small></div>' +
+          '<div><h4>团队 #' + teamNumber + ' — 第 ' + groupNum + ' 名</h4><small style="opacity:0.8">' + formatGameWeek(group.week || 0) + '</small><br><small style="opacity:0.8">成员：' + memberNames + '</small></div>' +
           '<div class="rank-badge">' + groupNum + '</div>' +
         '</div>' +
         '<div class="group-body">' +
