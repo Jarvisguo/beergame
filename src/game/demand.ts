@@ -6,6 +6,6 @@ export function normalizeTrend(trend: string): string {
 
 export function customerDemand(week: number, trend: string): number {
   const profile = DEMAND_PROFILES[normalizeTrend(trend)];
-  const entry = profile.schedule.find((e) => week < e.until);
+  const entry = profile.schedule.find((e) => week <= e.until);
   return entry ? entry.demand : profile.schedule[profile.schedule.length - 1].demand;
 }

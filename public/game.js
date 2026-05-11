@@ -334,7 +334,7 @@ socket.on('next turn', (msg) => {
 
     animateNum($('#usShpAmt'), 0, upstreamDelivery);
     animateNum($('#inventoryAmt'), prevInventory, prevInventory + upstreamDelivery);
-    animateNum($('#dsOrdrAmt'), newUser.role.downstream.orders, 0);
+    animateNum($('#dsOrdrAmt'), curUser.role.downstream.orders || 0, newUser.role.downstream.orders || 0);
     animateNum($('#dsShpAmt'), 0, newUser.role.downstream.shipments);
     animateNum($('#inventoryAmt'), prevInventory + upstreamDelivery, newUser.inventory);
     animateNum($('#bklgAmt'), curUser.backlog, newUser.backlog);
