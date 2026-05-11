@@ -324,23 +324,26 @@
       var totalBacklog = bullwhipData.reduce(function(a, d) { return a + d.finalBacklog; }, 0);
       var totalCost = bullwhipData.reduce(function(a, d) { return a + d.finalCost; }, 0);
 
-      // Generate mini bar chart for group
+      // Generate mini bar chart for group: aggregate all role orders by week.
       var barsHtml = '';
-      var allOrders = [];
+      var weeklyOrders = [];
       for (var u = 0; u < bullwhipData.length; u++) {
-        allOrders = allOrders.concat(bullwhipData[u].orderHistory || []);
+        var roleOrders = bullwhipData[u].orderHistory || [];
+        for (var w = 0; w < roleOrders.length && w < maxWeeks; w++) {
+          weeklyOrders[w] = (weeklyOrders[w] || 0) + roleOrders[w];
+        }
       }
-      if (allOrders.length > 0) {
-        var maxAllOrder = Math.max.apply(null, allOrders);
-        for (var w = 0; w < allOrders.length; w++) {
-          var height = maxAllOrder > 0 ? (allOrders[w] / maxAllOrder) * 100 : 0;
+      if (weeklyOrders.length > 0) {
+        var maxAllOrder = Math.max.apply(null, weeklyOrders);
+        for (var w = 0; w < weeklyOrders.length; w++) {
+          var height = maxAllOrder > 0 ? (weeklyOrders[w] / maxAllOrder) * 100 : 0;
           var barClass = '';
           if (w < 8) barClass = 'week1';
           else if (w < 19) barClass = 'week8';
           else if (w < 26) barClass = 'week19';
           else if (w < 39) barClass = 'week26';
           else barClass = 'week39';
-          barsHtml += '<div class="mini-bar ' + barClass + '" style="height:' + height + '%" data-val="W' + (w+1) + ': ' + allOrders[w] + '"></div>';
+          barsHtml += '<div class="mini-bar ' + barClass + '" style="height:' + height + '%" data-val="W' + (w+1) + ': ' + weeklyOrders[w] + '"></div>';
         }
       }
 

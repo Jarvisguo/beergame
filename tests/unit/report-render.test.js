@@ -77,4 +77,22 @@ assert.match(elements.groupsContainer.innerHTML, /团队 #1/);
 assert.match(elements.groupsContainer.innerHTML, /零售商/);
 assert.doesNotMatch(elements.insightText.textContent, /NaN|Infinity/);
 
+const groupWithFullOrderHistory = [{
+  week: 27,
+  cost: 100,
+  users: [
+    { name: 'A', role: makeRole('零售商', '客户'), cost: 10, inventory: 1, backlog: 0, orderHistory: Array.from({ length: 26 }, (_, i) => i + 1) },
+    { name: 'B', role: makeRole('批发商', '零售商'), cost: 20, inventory: 2, backlog: 0, orderHistory: Array.from({ length: 26 }, (_, i) => i + 2) },
+    { name: 'C', role: makeRole('区域仓库', '批发商'), cost: 30, inventory: 3, backlog: 0, orderHistory: Array.from({ length: 26 }, (_, i) => i + 3) },
+    { name: 'D', role: makeRole('工厂', '区域仓库'), cost: 40, inventory: 4, backlog: 0, orderHistory: Array.from({ length: 26 }, (_, i) => i + 4) },
+  ],
+}];
+
+const full = createContext(groupWithFullOrderHistory);
+full.context.generateReport();
+const bars = full.elements.groupsContainer.innerHTML.match(/class="mini-bar/g) || [];
+assert.strictEqual(bars.length, 26);
+assert.match(full.elements.groupsContainer.innerHTML, /W26: 110/);
+assert.doesNotMatch(full.elements.groupsContainer.innerHTML, /W27:/);
+
 console.log('report render test passed');

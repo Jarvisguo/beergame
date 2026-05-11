@@ -11,6 +11,7 @@ import {
   RECONNECT_GRACE_MS,
 } from '../config.js';
 import { log, groupRoom, ack } from '../utils.js';
+import { customerDemand } from '../game/demand.js';
 import { computeOrder, resolveParams } from '../agent/strategies.js';
 import type { StrategyName } from '../agent/strategies.js';
 
@@ -32,6 +33,9 @@ function initGroup(io: Server, groupIndex: number): void {
     g.users[j].backlogHistory = [];
     g.users[j].costHistory = [];
     g.users[j].orderHistory = [];
+  }
+  if (g.users[0]) {
+    g.users[0].role.downstream.orders = customerDemand(1, g.demandTrend);
   }
   g.week = 1;
   io.to(groupRoom(groupIndex)).emit('game started', {
@@ -184,6 +188,11 @@ export function registerPlayerHandlers(io: Server, socket: Socket): void {
       return ack(callback, { err: `游戏已完成 ${MAX_WEEKS} 周，不再接受订单。` });
     }
 
+    const roleName = g.users[user.index].role.name;
+    if (!g.waitingForOrders.includes(roleName)) {
+      return ack(callback, { err: '本周订单已提交，不能重复修改。' });
+    }
+
     const parsed = parseInt(String(order).trim(), 10);
     if (isNaN(parsed) || parsed < 0 || !/^\d+$/.test(String(order).trim())) {
       return ack(callback, { err: '订单数量必须是有效的非负整数。' });
@@ -193,7 +202,7 @@ export function registerPlayerHandlers(io: Server, socket: Socket): void {
 
     g.users[user.index].role.upstream.orders = parsed;
 
-    const idx = g.waitingForOrders.indexOf(g.users[user.index].role.name);
+    const idx = g.waitingForOrders.indexOf(roleName);
     if (idx !== -1) {
       g.waitingForOrders.splice(idx, 1);
     }

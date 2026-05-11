@@ -9,7 +9,7 @@ import {
   BEER_NAMES,
 } from '../config.js';
 import { log, groupRoom, ack, clearDisconnectTimer, deepClone, makeRole } from '../utils.js';
-import { normalizeTrend } from '../game/demand.js';
+import { customerDemand, normalizeTrend } from '../game/demand.js';
 import { scheduleAgentSubmissions } from './player.js';
 import { resolveParams } from '../agent/strategies.js';
 import type { StrategyName } from '../agent/strategies.js';
@@ -35,6 +35,9 @@ function initGroup(io: Server, groupIndex: number): void {
     g.users[j].backlogHistory = [];
     g.users[j].costHistory = [];
     g.users[j].orderHistory = [];
+  }
+  if (g.users[0]) {
+    g.users[0].role.downstream.orders = customerDemand(1, g.demandTrend);
   }
   g.week = 1;
   io.to(groupRoom(groupIndex)).emit('game started', {

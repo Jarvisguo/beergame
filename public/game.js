@@ -93,6 +93,24 @@ function updateBoard() {
   $('#cstAmt').textContent = (curUser.cost || 0).toFixed(0);
   $('#inventoryAmt').textContent = curUser.inventory || 0;
   $('#bklgAmt').textContent = curUser.backlog || 0;
+  updateUpstreamShipmentDelta(curUser);
+}
+
+function expectedUpstreamShipmentOrder(user) {
+  const history = user && user.orderHistory ? user.orderHistory : [];
+  if (history.length >= 4) return history[history.length - 4];
+  return 4;
+}
+
+function updateUpstreamShipmentDelta(user) {
+  const el = $('#usShpDelta');
+  if (!el || !user || !user.role) return;
+  const shipment = user.role.upstream.shipments || 0;
+  const expected = expectedUpstreamShipmentOrder(user);
+  const diff = shipment - expected;
+  el.textContent = diff === 0 ? '(0)' : `(${diff > 0 ? '+' : ''}${diff})`;
+  el.classList.toggle('delta-neg', diff < 0);
+  el.classList.toggle('delta-pos', diff > 0);
 }
 
 // ── Status ────────────────────────────────────────────────────────────
@@ -124,10 +142,16 @@ function updateAnalytics() {
 
   // Cost chart
   if (curUser && curUser.costHistory) {
-    const costs = curUser.costHistory;
+    const costs = curUser.costHistory
+      .filter((c) => Number.isFinite(c))
+      .slice();
+    const currentCost = Number(curUser.cost) || 0;
+    if (costs.length === 0 || costs[costs.length - 1] !== currentCost) {
+      costs.push(currentCost);
+    }
     const maxC = Math.max(...costs, 1);
     const html = costs.map((c, i) => {
-      const h = (c / maxC) * 100;
+      const h = Math.max(8, (c / maxC) * 100);
       const shade = Math.round(180 - (h / 100) * 80);
       return `<div title="第${i + 1}周: ¥${c.toFixed(0)}" style="height:${h}%;background:hsl(${210 - (i * 2)},${50}%,${shade > 100 ? 100 : shade}%);flex:1;min-height:2px;border-radius:2px 2px 0 0"></div>`;
     }).join('');
@@ -339,6 +363,7 @@ socket.on('next turn', (msg) => {
     animateNum($('#inventoryAmt'), prevInventory + upstreamDelivery, newUser.inventory);
     animateNum($('#bklgAmt'), curUser.backlog, newUser.backlog);
     animateNum($('#cstAmt'), prevCost, newUser.cost, 0);
+    updateUpstreamShipmentDelta(newUser);
 
     if (msg.week <= MAX_WEEKS && !submittedOrder) {
       setFlowState('waiting-turn', {

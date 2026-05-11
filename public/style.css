@@ -105,6 +105,11 @@ table { border-collapse: collapse; width: 100%; }
 .panel-body strong { display: block; font-size: 12px; color: var(--clr-muted); margin-bottom: 4px; }
 .big-num { display: block; font-size: var(--font-xl); font-weight: 800; font-variant-numeric: tabular-nums; }
 .mid-num { display: block; font-size: var(--font-lg); font-weight: 700; font-variant-numeric: tabular-nums; color: var(--clr-danger); }
+.num-with-delta { display: inline-flex; align-items: baseline; justify-content: center; gap: 6px; }
+.num-with-delta .big-num { display: inline-block; }
+.delta-num { font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--clr-muted); }
+.delta-num.delta-neg { color: var(--clr-danger); }
+.delta-num.delta-pos { color: var(--clr-success); }
 
 /* ── Flow Cards ─────────────────────────────────────────────────────── */
 .flow-area { margin-bottom: var(--space-md); }
