@@ -45,6 +45,8 @@
     .mini-bar.week19 { background: #6bb0e7; }
     .mini-bar.week26 { background: #7cc0ee; }
     .mini-bar.week39 { background: #8dd0f5; }
+    .mini-bar.cost-bar { background: #e63946; }
+    .mini-bar.cost-bar:hover { background: #c92f3b; }
     .discussion-section { background: #fff9e6; border: 1px solid #f0d77a; border-radius: 8px; padding: 20px; margin-top: 30px; }
     .discussion-section h3 { color: #8a6d3b; margin-bottom: 15px; }
     .discussion-section ul { padding-left: 20px; }
@@ -347,6 +349,21 @@
         }
       }
 
+      var costBarsHtml = '';
+      var costHistory = Array.isArray(group.costHistory) ? group.costHistory.slice(0, maxWeeks) : [];
+      var finalCost = Number(group.cost) || 0;
+      if (costHistory.length === 0 || costHistory[costHistory.length - 1] !== finalCost) {
+        costHistory.push(finalCost);
+      }
+      if (costHistory.length > maxWeeks) costHistory = costHistory.slice(0, maxWeeks);
+      if (costHistory.length > 0) {
+        var maxCost = Math.max.apply(null, costHistory.concat([1]));
+        for (var cw = 0; cw < costHistory.length; cw++) {
+          var costHeight = Math.max(5, (costHistory[cw] / maxCost) * 100);
+          costBarsHtml += '<div class="mini-bar cost-bar" style="height:' + costHeight + '%" data-val="W' + (cw+1) + ': ¥' + Math.round(costHistory[cw]) + '"></div>';
+        }
+      }
+
       var teamNumber = (group._originalIndex !== undefined ? group._originalIndex : rank) + 1;
       html += '<div class="group-card group-rank-' + groupNum + '">' +
         '<div class="group-header">' +
@@ -380,8 +397,10 @@
       }
 
       html += '</tbody></table>' +
-        '<div style="margin-top:10px;font-size:11px;color:#888;">订单量趋势：</div>' +
+        '<div style="margin-top:10px;font-size:11px;color:#888;">团队每周下单总量：</div>' +
         '<div class="mini-chart">' + barsHtml + '</div>' +
+        '<div style="margin-top:12px;font-size:11px;color:#888;">累计总成本趋势：</div>' +
+        '<div class="mini-chart">' + costBarsHtml + '</div>' +
       '</div></div>';
     }
     document.getElementById('groupsContainer').innerHTML = html;

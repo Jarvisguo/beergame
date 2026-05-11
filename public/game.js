@@ -141,8 +141,8 @@ function updateAnalytics() {
   $('#weekProgress').style.width = `${Math.min(100, (w / MAX_WEEKS) * 100)}%`;
 
   // Cost chart
-  if (curUser && curUser.costHistory) {
-    const costs = curUser.costHistory
+  if (curUser) {
+    const costs = (curUser.costHistory || [])
       .filter((c) => Number.isFinite(c))
       .slice();
     const currentCost = Number(curUser.cost) || 0;
@@ -152,8 +152,8 @@ function updateAnalytics() {
     const maxC = Math.max(...costs, 1);
     const html = costs.map((c, i) => {
       const h = Math.max(8, (c / maxC) * 100);
-      const shade = Math.round(180 - (h / 100) * 80);
-      return `<div title="第${i + 1}周: ¥${c.toFixed(0)}" style="height:${h}%;background:hsl(${210 - (i * 2)},${50}%,${shade > 100 ? 100 : shade}%);flex:1;min-height:2px;border-radius:2px 2px 0 0"></div>`;
+      const color = c === 0 ? '#cbd5e1' : '#2563eb';
+      return `<div title="第${i + 1}周: ¥${c.toFixed(0)}" style="height:${h}%;background:${color};flex:1;min-height:8px;border-radius:2px 2px 0 0"></div>`;
     }).join('');
     $('#costChart').innerHTML = html;
   }

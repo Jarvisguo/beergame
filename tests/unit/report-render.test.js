@@ -90,9 +90,13 @@ const groupWithFullOrderHistory = [{
 
 const full = createContext(groupWithFullOrderHistory);
 full.context.generateReport();
-const bars = full.elements.groupsContainer.innerHTML.match(/class="mini-bar/g) || [];
-assert.strictEqual(bars.length, 26);
+const orderBars = full.elements.groupsContainer.innerHTML.match(/class="mini-bar week/g) || [];
+const costBars = full.elements.groupsContainer.innerHTML.match(/class="mini-bar cost-bar/g) || [];
+assert.strictEqual(orderBars.length, 26);
+assert.strictEqual(costBars.length, 1);
 assert.match(full.elements.groupsContainer.innerHTML, /W26: 110/);
 assert.doesNotMatch(full.elements.groupsContainer.innerHTML, /W27:/);
+assert.match(full.elements.groupsContainer.innerHTML, /团队每周下单总量/);
+assert.match(full.elements.groupsContainer.innerHTML, /累计总成本趋势/);
 
 console.log('report render test passed');
