@@ -58,8 +58,18 @@ function emit(socket, event, ...args) {
   });
 }
 
-function once(socket, event) {
-  return new Promise((resolve) => socket.once(event, resolve));
+function once(socket, event, ms = 8000) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      socket.off(event, handler);
+      reject(new Error(`timeout waiting for '${event}'`));
+    }, ms);
+    function handler(payload) {
+      clearTimeout(timer);
+      resolve(payload);
+    }
+    socket.once(event, handler);
+  });
 }
 
 // TC3: 静态资源可访问
@@ -252,6 +262,7 @@ async function assertWeekLimitStopsOrdersAt26() {
   const players = [];
   try {
     await emit(admin, 'submit password', ADMIN_PASSWORD);
+    await emit(admin, 'start game');
 
     for (let i = 0; i < 4; i++) {
       players.push(await connectClient());
@@ -260,7 +271,7 @@ async function assertWeekLimitStopsOrdersAt26() {
     for (let i = 0; i < 4; i++) {
       await emit(players[i], 'submit username', `limit-${i + 1}`);
     }
-    await Promise.all([...gameStartedEvents, emit(admin, 'start game')]);
+    await Promise.all(gameStartedEvents);
 
     for (let round = 1; round <= 26; round++) {
       const nextTurnEvents = players.map((socket) => once(socket, 'next turn'));
@@ -290,6 +301,7 @@ async function assertDemandTrendSelection(trend, rounds, expectedDemand) {
   const players = [];
   try {
     await emit(admin, 'submit password', ADMIN_PASSWORD);
+    await emit(admin, 'start game', { demandTrend: trend });
 
     for (let i = 0; i < 4; i++) {
       players.push(await connectClient());
@@ -298,7 +310,7 @@ async function assertDemandTrendSelection(trend, rounds, expectedDemand) {
     for (let i = 0; i < 4; i++) {
       await emit(players[i], 'submit username', `${trend}-${i + 1}`);
     }
-    await Promise.all([...gameStartedEvents, emit(admin, 'start game', { demandTrend: trend })]);
+    await Promise.all(gameStartedEvents);
 
     for (let round = 1; round < rounds; round++) {
       const nextTurnEvents = players.map((socket) => once(socket, 'next turn'));
@@ -357,6 +369,7 @@ async function assertTakeoverInheritsData() {
   const players = [];
   try {
     await emit(admin, 'submit password', ADMIN_PASSWORD);
+    await emit(admin, 'start game');
 
     for (let i = 0; i < 4; i++) {
       players.push(await connectClient());
@@ -365,7 +378,7 @@ async function assertTakeoverInheritsData() {
     for (let i = 0; i < 4; i++) {
       await emit(players[i], 'submit username', `takeover-${i + 1}`);
     }
-    await Promise.all([...gameStartedEvents, emit(admin, 'start game')]);
+    await Promise.all(gameStartedEvents);
 
     // 完成第 1 周，让玩家积累一些成本
     const nextTurnEvents = players.map((socket) => once(socket, 'next turn'));
@@ -441,6 +454,7 @@ async function assertResetGame() {
   const players = [];
   try {
     await emit(admin, 'submit password', ADMIN_PASSWORD);
+    await emit(admin, 'start game');
 
     for (let i = 0; i < 4; i++) {
       players.push(await connectClient());
@@ -449,7 +463,7 @@ async function assertResetGame() {
     for (let i = 0; i < 4; i++) {
       await emit(players[i], 'submit username', `reset-${i + 1}`);
     }
-    await Promise.all([...gameStartedEvents, emit(admin, 'start game')]);
+    await Promise.all(gameStartedEvents);
 
     const resetEvents = players.map((socket) => once(socket, 'game reset'));
     await emit(admin, 'reset game');

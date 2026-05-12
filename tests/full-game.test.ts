@@ -94,10 +94,10 @@ function refAdvanceTurn(g: RefGroup): void {
     if (i === 3) g.shipping[i].push(u.role.upstream.orders);
     else g.mailing[i].push(u.role.upstream.orders);
 
-    g.cost += u.cost;
     u.cost += u.inventory * INVENTORY_COST + u.backlog * BACKLOG_COST;
   }
 
+  g.cost = g.users.reduce((sum, u) => sum + u.cost, 0);
   g.costHistory.push(g.cost);
   g.week++;
 }
@@ -122,8 +122,18 @@ function createRefGroup(players: string[], trend: string): RefGroup {
 
 function wait(ms: number) { return new Promise(r => setTimeout(r, ms)); }
 
-function once(s: Socket, event: string): Promise<any> {
-  return new Promise(r => s.once(event, r));
+function once(s: Socket, event: string, ms = 8000): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      s.off(event, handler);
+      reject(new Error(`timeout waiting for '${event}'`));
+    }, ms);
+    function handler(payload: any) {
+      clearTimeout(timer);
+      resolve(payload);
+    }
+    s.once(event, handler);
+  });
 }
 
 function emit(s: Socket, event: string, ...args: any[]): Promise<any> {
@@ -135,7 +145,7 @@ function emit(s: Socket, event: string, ...args: any[]): Promise<any> {
 }
 
 async function startServer(): Promise<ChildProcess> {
-  const server = spawn(process.execPath, ['src/server.ts'], {
+  const server = spawn(process.execPath, ['index.js'], {
     cwd: process.cwd(),
     env: { ...process.env, PORT: String(PORT), ADMIN_PASSWORD: ADMIN_PW, MOBILE_RECONNECT_GRACE_MS: String(GRACE_MS) },
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -580,10 +590,13 @@ async function testStateMachine() {
     assert(!resetResp.err, `reset after ended should succeed`);
     await Promise.all(resetEvents);
 
-    // Start again
-    const start2Events = players.map(s => once(s, 'game started'));
+    // Start again and re-register reset sockets.
     const start2Resp = await emit(admin, 'start game');
     assert(!start2Resp.err, `restart after reset should succeed: ${start2Resp.err || ''}`);
+    const start2Events = players.map(s => once(s, 'game started'));
+    for (let i = 0; i < 4; i++) {
+      await emit(players[i], 'submit username', `sm-restart-${i + 1}`);
+    }
     await Promise.all(start2Events);
 
     console.log('  start(0p) → login(4p) → end → reset → start all OK');

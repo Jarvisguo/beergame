@@ -181,6 +181,65 @@ export function registerAdminHandlers(io: Server, socket: Socket): void {
     });
   });
 
+  socket.on('remove member', (msg: {
+    groupIndex: number;
+    roleIndex: number;
+    reason?: string;
+  }, callback?: Function) => {
+    const groupIndex = Number(msg && msg.groupIndex);
+    const roleIndex = Number(msg && msg.roleIndex);
+
+    if (
+      !Number.isInteger(groupIndex) ||
+      !Number.isInteger(roleIndex) ||
+      groupIndex < 0 ||
+      roleIndex < 0 ||
+      roleIndex > 3
+    ) {
+      return ack(callback, { err: '无效成员位置。' });
+    }
+
+    const g = state.groups[groupIndex];
+    if (!g) return ack(callback, { ok: true, alreadyRemoved: true, numUsers: state.numUsers, groups: state.groups });
+
+    const user = g.users[roleIndex];
+    if (!user || user.removed) {
+      return ack(callback, { ok: true, alreadyRemoved: true, numUsers: state.numUsers, groups: state.groups });
+    }
+
+    const room = groupRoom(groupIndex);
+    const socketId = user.socketId;
+    const lookup = user.name ? state.users[user.name] : undefined;
+
+    if (lookup) {
+      clearDisconnectTimer(lookup);
+      delete state.users[user.name];
+      state.numUsers = Math.max(0, state.numUsers - 1);
+    }
+
+    clearDisconnectTimer(user);
+    delete user.socketId;
+    delete user.disconnectedAt;
+    delete user.disconnectTimer;
+    delete user.agent;
+    user.removed = true;
+    user.removedAt = Date.now();
+    user.removedBy = socket.id;
+    user.removalReason = msg.reason || 'admin';
+
+    if (socketId) {
+      const memberSocket = io.sockets.sockets.get(socketId);
+      memberSocket?.emit('kicked out', { groupIndex, roleIndex, reason: user.removalReason });
+      memberSocket?.leave(room);
+    }
+
+    io.to(room).emit('group member left', { idx: roleIndex, update: user, removed: true });
+    io.to('admins').emit('update table', { numUsers: state.numUsers, groups: state.groups });
+
+    log('INFO', `admin remove member: group=${groupIndex} role=${roleIndex} name=${user.name} reason=${user.removalReason}`);
+    ack(callback, { ok: true, numUsers: state.numUsers, groups: state.groups });
+  });
+
   socket.on('add agent', (msg: {
     groupIndex: number;
     roleIndex: number;
@@ -220,7 +279,7 @@ export function registerAdminHandlers(io: Server, socket: Socket): void {
       params: params || {},
     };
 
-    if (existing) {
+    if (existing && !existing.removed) {
       existing.agent = agentConfig;
     } else {
       const userName = `AI-${['零售商','批发商','区域仓库','工厂'][roleIndex]}-G${groupIndex + 1}`;

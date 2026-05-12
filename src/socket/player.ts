@@ -96,7 +96,13 @@ export function registerPlayerHandlers(io: Server, socket: Socket): void {
   let addedUser = false;
 
   socket.on('submit username', (userName: string, callback?: Function) => {
-    if (addedUser) return;
+    if (addedUser) {
+      const currentName = (socket as any).name as string | undefined;
+      const currentUser = currentName ? state.users[currentName] : undefined;
+      if (currentUser && currentUser.socketId === socket.id) return;
+      addedUser = false;
+      delete (socket as any).name;
+    }
 
     log('INFO', `${socket.id}: submit username ${userName}`);
 
@@ -252,5 +258,10 @@ export function registerPlayerHandlers(io: Server, socket: Socket): void {
       };
       finalizeDisconnect(name, emitFn);
     }, RECONNECT_GRACE_MS);
+  });
+
+  socket.on('ack getting kicked', () => {
+    addedUser = false;
+    delete (socket as any).name;
   });
 }

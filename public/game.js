@@ -301,6 +301,7 @@ socket.on('group member joined', (msg) => {
 
 socket.on('group member left', (msg) => {
   if (!curGroup) return;
+  if (typeof msg.idx === 'number') curGroup.users[msg.idx] = msg.update;
   updateGroupTable();
 });
 

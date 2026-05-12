@@ -71,7 +71,7 @@ function refreshTable(groups, gameStarted) {
 
     let totalInv = 0, totalBack = 0;
     for (let j = 0; j < 4; j++) {
-      if (g.users[j]) {
+      if (g.users[j] && !g.users[j].removed) {
         totalInv += g.users[j].inventory || 0;
         totalBack += g.users[j].backlog || 0;
         const u = g.users[j];
@@ -81,10 +81,13 @@ function refreshTable(groups, gameStarted) {
         } else if (!u.socketId) {
           badge = ' <span class="tag tag-disc">已断开</span>';
         }
-        const btn = (!u.socketId && !u.agent && adminGameStarted && !adminGameEnded)
+        const assignBtn = (!u.socketId && !u.agent && adminGameStarted && !adminGameEnded)
           ? ` <button class="btn btn-sm btn-outline btnAgentAssign" data-group="${i}" data-role="${j}">+AI</button>`
-          : (u.agent ? ` <button class="btn btn-sm btn-outline btnAgentRemove" data-group="${i}" data-role="${j}">✕</button>` : '');
-        html += `<td>${u.name}${badge}${btn}</td>`;
+          : '';
+        const removeBtn = adminGameStarted && !adminGameEnded
+          ? ` <button class="btn btn-sm btn-outline btnMemberRemove" data-group="${i}" data-role="${j}">移出</button>`
+          : '';
+        html += `<td>${u.name}${badge}${assignBtn}${removeBtn}</td>`;
       } else {
         if (adminGameStarted && !adminGameEnded) {
           html += `<td><button class="btn btn-sm btn-outline btnAgentAssign" data-group="${i}" data-role="${j}">+AI</button></td>`;
@@ -291,7 +294,7 @@ $('#btnFillAI').addEventListener('click', () => {
 
 $('#adminTbody').addEventListener('click', (e) => {
   const assignBtn = e.target.closest('.btnAgentAssign');
-  const removeBtn = e.target.closest('.btnAgentRemove');
+  const removeBtn = e.target.closest('.btnMemberRemove');
 
   if (assignBtn) {
     agentTarget = {
@@ -308,7 +311,15 @@ $('#adminTbody').addEventListener('click', (e) => {
   if (removeBtn) {
     const gi = parseInt(removeBtn.getAttribute('data-group'));
     const ri = parseInt(removeBtn.getAttribute('data-role'));
-    socket.emit('remove agent', { groupIndex: gi, roleIndex: ri });
+    const u = gameGroup[gi] && gameGroup[gi].users && gameGroup[gi].users[ri];
+    const label = u && u.name ? u.name : `队伍 ${gi + 1} 角色 ${ri + 1}`;
+    if (!window.confirm(`确认将 ${label} 移出房间？`)) return;
+    socket.emit('remove member', { groupIndex: gi, roleIndex: ri, reason: 'admin' }, (msg) => {
+      if (msg && msg.err) {
+        $('#gameError').textContent = '移出失败。' + msg.err;
+        $('#gameError').hidden = false;
+      }
+    });
   }
 });
 

@@ -14,6 +14,10 @@ export interface GameUser {
   socketId?: string;
   disconnectedAt?: number;
   disconnectTimer?: ReturnType<typeof setTimeout>;
+  removed?: boolean;
+  removedAt?: number;
+  removedBy?: string;
+  removalReason?: string;
   cost: number;
   inventory: number;
   backlog: number;

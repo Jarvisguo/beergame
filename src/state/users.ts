@@ -25,7 +25,7 @@ import { state } from './store.js';
  * Priority order (per requirements doc):
  *  1. Known username + already active (has socketId, not disconnected) -> reject
  *  2. Known username + disconnected                                     -> reconnect
- *  3. Any group slot whose socketId is empty (takeover a disconnected slot)
+ *  3. Any group slot whose socketId is empty (takeover disconnected, or replace removed)
  *  4. Any group slot that is not yet filled (< 4 players, week-agnostic)
  *  5. Create a new group
  */
@@ -70,7 +70,7 @@ export function registerUser(
     for (let ri = 0; ri < grp.users.length; ri++) {
       const slot = grp.users[ri];
       if (slot && !slot.socketId) {
-        return placeUser(socketId, userName, gi, ri, true);
+        return placeUser(socketId, userName, gi, ri, !slot.removed);
       }
     }
   }
@@ -165,6 +165,10 @@ function placeUser(
     g.users[slotIndex].socketId = socketId;
     delete g.users[slotIndex].disconnectedAt;
     delete g.users[slotIndex].disconnectTimer;
+    delete g.users[slotIndex].removed;
+    delete g.users[slotIndex].removedAt;
+    delete g.users[slotIndex].removedBy;
+    delete g.users[slotIndex].removalReason;
   } else {
     // Brand-new slot
     const role = deepClone(makeRole(slotIndex));
