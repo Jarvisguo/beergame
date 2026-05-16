@@ -25,6 +25,8 @@ let curGroup = null;
 let gameEnded = false;
 let myRoleName = '';
 let submittedOrder = false;
+let activeUsername = localStorage.getItem('bdg_username') || '';
+let restoreInFlight = false;
 
 // ── Connection ────────────────────────────────────────────────────────
 function setConn(state) {
@@ -41,16 +43,26 @@ function showToast(msg, dur = 2500) {
   t._tid = setTimeout(() => { t.hidden = true; }, dur);
 }
 
-socket.on('connect', () => setConn('online'));
-socket.on('reconnect', () => { setConn('online'); showToast('已恢复连接'); });
+socket.on('connect', () => {
+  setConn('online');
+  restoreSessionAfterReconnect();
+});
+socket.on('reconnect', () => {
+  setConn('online');
+  restoreSessionAfterReconnect(true);
+});
 socket.on('reconnecting', () => setConn('reconnecting'));
 socket.on('disconnect', () => setConn('offline'));
 socket.on('reconnect_failed', () => setConn('offline'));
 
 // Page Visibility: detect screen-on after phone lock
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && !socket.connected) {
-    socket.connect();
+  if (document.visibilityState === 'visible') {
+    if (!socket.connected) {
+      socket.connect();
+    } else {
+      restoreSessionAfterReconnect();
+    }
   }
 });
 
@@ -259,7 +271,7 @@ function nextTurn(users, week, user) {
 
 function resetUI() {
   curWeek = 0; curUser = null; numUsers = 0; userIdx = 0;
-  curGroup = null; gameEnded = false; submittedOrder = false;
+  curGroup = null; gameEnded = false; submittedOrder = false; activeUsername = '';
 
   setFlowState('lobby', { text: '等待其他成员加入...' });
   $('#btnOrder').disabled = true;
@@ -279,6 +291,79 @@ function resetUI() {
   });
 }
 
+function applyLoginState(msg, options = {}) {
+  userIdx = msg.idx;
+  curGroup = msg.group;
+  curUser = msg.group.users[userIdx];
+  curWeek = msg.group.week;
+  numUsers = msg.numUsers;
+  gameEnded = msg.gameEnded;
+  activeUsername = curUser.name;
+
+  $('#loginErr').hidden = true;
+  $('#loginModal').hidden = true;
+  $('#mainApp').hidden = false;
+  $('#userRole').textContent = '您的角色：' + curUser.role.name;
+  $('#username').textContent = '已登录：' + curUser.name;
+  updateBoard();
+
+  if (msg.reconnected && !options.silent) {
+    showToast('欢迎回来，已恢复游戏状态', 3000);
+  } else if (options.showRestored) {
+    showToast('已恢复连接和游戏状态', 2500);
+  }
+
+  localStorage.setItem('bdg_username', curUser.name);
+
+  myRoleName = curUser.role.name;
+
+  if (curWeek > 0 && !gameEnded) {
+    nextTurn(numUsers, curWeek, curUser);
+    if (hasCompleted()) {
+      submittedOrder = true;
+      setFlowState('completed');
+    } else if (curGroup.waitingForOrders.indexOf(myRoleName) === -1) {
+      submittedOrder = true;
+      setFlowState('waiting-others', { waiting: curGroup.waitingForOrders });
+    } else {
+      submittedOrder = false;
+      setFlowState('waiting-turn', {
+        week: curWeek,
+        delivery: curUser.role.upstream.shipments,
+        shipped: curUser.role.downstream.shipments,
+        inventory: curUser.inventory,
+        upstreamName: curUser.role.upstream.name,
+        downstreamName: curUser.role.downstream.name,
+      });
+    }
+    $('#board').hidden = false;
+    $('#lobby').hidden = true;
+  } else if (gameEnded) {
+    setFlowState('ended');
+    updateStatus();
+    updateGroupTable();
+  } else {
+    setFlowState('lobby', { text: '等待其他成员加入...' });
+    $('#btnOrder').disabled = true;
+    $('#orderInput').disabled = true;
+    $('#board').hidden = true;
+    $('#lobby').hidden = false;
+    updateStatus();
+    updateGroupTable();
+  }
+}
+
+function restoreSessionAfterReconnect(showRestored = false) {
+  const name = activeUsername || localStorage.getItem('bdg_username') || '';
+  if (!name || restoreInFlight || !socket.connected) return;
+  restoreInFlight = true;
+  socket.emit('submit username', name, (msg) => {
+    restoreInFlight = false;
+    if (!msg || typeof msg !== 'object' || msg.err || msg === 'Game Started') return;
+    applyLoginState(msg, { silent: true, showRestored });
+  });
+}
+
 // ── Socket Events ─────────────────────────────────────────────────────
 
 socket.on('user joined', (msg) => { numUsers = msg.numUsers; updateStatus(); });
@@ -290,6 +375,7 @@ socket.on('change group subscription', (msg) => {
 
 socket.on('kicked out', () => {
   socket.emit('ack getting kicked');
+  localStorage.removeItem('bdg_username');
   resetUI();
 });
 
@@ -451,65 +537,7 @@ $('#btnLogin').addEventListener('click', (e) => {
     } else if (msg && msg.err) {
       $('#loginErr').hidden = false;
     } else {
-      userIdx = msg.idx;
-      curGroup = msg.group;
-      curUser = msg.group.users[userIdx];
-      curWeek = msg.group.week;
-      numUsers = msg.numUsers;
-      gameEnded = msg.gameEnded;
-
-      $('#loginErr').hidden = true;
-      $('#loginModal').hidden = true;
-      $('#mainApp').hidden = false;
-      $('#userRole').textContent = '您的角色：' + curUser.role.name;
-      $('#username').textContent = '已登录：' + curUser.name;
-      updateBoard();
-
-      if (msg.reconnected) {
-        showToast('欢迎回来，已恢复游戏状态', 3000);
-      }
-
-      localStorage.setItem("bdg_username", curUser.name);
-
-      myRoleName = curUser.role.name;
-
-      if (curWeek > 0 && !gameEnded) {
-        nextTurn(numUsers, curWeek, curUser);
-        if (hasCompleted()) {
-          submittedOrder = true;
-          setFlowState('completed');
-        } else if (curGroup.waitingForOrders.indexOf(myRoleName) === -1) {
-          submittedOrder = true;
-          setFlowState('waiting-others', { waiting: curGroup.waitingForOrders });
-        } else {
-          submittedOrder = false;
-          setFlowState('waiting-turn', {
-            week: curWeek,
-            delivery: curUser.role.upstream.shipments,
-            shipped: curUser.role.downstream.shipments,
-            inventory: curUser.inventory,
-            upstreamName: curUser.role.upstream.name,
-            downstreamName: curUser.role.downstream.name,
-          });
-        }
-        $('#board').hidden = false;
-        $('#lobby').hidden = true;
-      } else if (gameEnded) {
-        setFlowState('ended');
-        updateStatus();
-        updateGroupTable();
-      } else {
-        // week=0: waiting for group to fill up
-        setFlowState('lobby', { text: '等待其他成员加入...' });
-        $('#btnOrder').disabled = true;
-        $('#orderInput').disabled = true;
-        $('#btnOrder').disabled = true;
-        $('#orderInput').disabled = true;
-        $('#board').hidden = true;
-        $('#lobby').hidden = false;
-        updateStatus();
-        updateGroupTable();
-      }
+      applyLoginState(msg);
     }
   });
 });

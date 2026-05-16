@@ -42,8 +42,8 @@ export const DEMAND_PROFILES: Record<string, DemandProfile> = {
 export const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin';
 
 export const RECONNECT_GRACE_MS = (() => {
-  const v = parseInt(process.env.MOBILE_RECONNECT_GRACE_MS || '180000', 10);
-  return isNaN(v) || v < 0 ? 180000 : v;
+  const v = parseInt(process.env.MOBILE_RECONNECT_GRACE_MS || '300000', 10);
+  return isNaN(v) || v < 0 ? 300000 : v;
 })();
 
 export const PORT = parseInt(process.env.PORT || '3000', 10);

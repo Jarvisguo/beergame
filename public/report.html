@@ -36,6 +36,14 @@
     .role-table th { background: #e8eef3; padding: 8px 12px; text-align: left; border-bottom: 2px solid #c5d5e5; }
     .role-table td { padding: 8px 12px; border-bottom: 1px solid #eee; }
     .role-table tr:hover { background: #f9fbfe; }
+    .weekly-detail-wrap { margin-top: 14px; overflow-x: auto; border: 1px solid #e4ebf2; border-radius: 6px; }
+    .weekly-detail-table { width: 100%; min-width: 720px; border-collapse: collapse; font-size: 12px; }
+    .weekly-detail-table th { position: sticky; top: 0; background: #eef4f8; color: #35576b; padding: 7px 8px; border-bottom: 1px solid #d5e1ea; text-align: left; white-space: nowrap; }
+    .weekly-detail-table td { padding: 7px 8px; border-bottom: 1px solid #edf1f5; vertical-align: top; white-space: nowrap; }
+    .weekly-detail-table .player-col { min-width: 120px; font-weight: bold; }
+    .weekly-detail-table .role-col { min-width: 90px; color: #577083; }
+    .weekly-cell-cost { display: block; color: #e63946; font-weight: bold; }
+    .weekly-cell-bullwhip { display: block; margin-top: 2px; color: #667; font-size: 11px; }
     .mini-chart { height: 120px; display: flex; align-items: flex-end; gap: 3px; margin-top: 10px; }
     .mini-bar { flex: 1; background: #2c5f7a; border-radius: 2px 2px 0 0; min-height: 5px; position: relative; cursor: pointer; transition: background 0.2s; }
     .mini-bar:hover { background: #1a4a5f; }
@@ -163,6 +171,72 @@
       .replace(/'/g, '&#39;');
   }
 
+  function numericHistory(history, fallback) {
+    var values = Array.isArray(history) ? history : [];
+    var result = [];
+    for (var i = 0; i < values.length && i < maxWeeks; i++) {
+      var value = Number(values[i]);
+      if (!isNaN(value)) result.push(value);
+    }
+    if (result.length === 0 && fallback !== undefined && !isNaN(Number(fallback))) {
+      result.push(Number(fallback));
+    }
+    return result;
+  }
+
+  function calculateOrderMetrics(orderHistory, downstreamOrders, weekLimit) {
+    var limit = weekLimit || maxWeeks;
+    var orders = numericHistory(orderHistory).slice(0, limit);
+    var downstream = numericHistory(downstreamOrders).slice(0, limit);
+    var mean = orders.length > 0 ? orders.reduce(function(a, b) { return a + b; }, 0) / orders.length : 0;
+    var variance = orders.length > 0 ? orders.reduce(function(a, b) { return a + Math.pow(b - mean, 2); }, 0) / orders.length : 0;
+    var stdDev = Math.sqrt(variance);
+    var cv = mean > 0 ? stdDev / mean : 0;
+    var maxOrder = orders.length > 0 ? Math.max.apply(null, orders) : 0;
+    var minOrder = orders.length > 0 ? Math.min.apply(null, orders) : 0;
+    var orderRange = maxOrder - minOrder;
+
+    var downstreamCV = 0;
+    if (downstream.length > 0) {
+      var downMean = downstream.reduce(function(a, b) { return a + b; }, 0) / downstream.length;
+      var downVar = downstream.reduce(function(a, b) { return a + Math.pow(b - downMean, 2); }, 0) / downstream.length;
+      var downStd = Math.sqrt(downVar);
+      downstreamCV = downMean > 0 ? downStd / downMean : 0;
+    }
+
+    var bullwhipRatio = downstreamCV > 0 ? cv / downstreamCV : 1;
+    var downstreamMax = downstream.length > 0 ? Math.max.apply(null, downstream) : 0;
+    var simpleAmplify = downstreamMax > 0 ? maxOrder / downstreamMax : 1;
+    var bullwhipScore = 0;
+    if (orders.length >= 3) {
+      var effect = Math.max(bullwhipRatio, simpleAmplify);
+      bullwhipScore = Math.min(100, Math.max(0, Math.round((effect - 1) * 50)));
+    }
+
+    return {
+      orders: orders,
+      mean: mean,
+      stdDev: stdDev,
+      cv: cv,
+      orderRange: orderRange,
+      bullwhipRatio: bullwhipRatio,
+      simpleAmplify: simpleAmplify,
+      bullwhipScore: bullwhipScore
+    };
+  }
+
+  function weeklyCostFromHistory(costHistory, finalCost) {
+    var cumulative = numericHistory(costHistory, finalCost);
+    var weekly = [];
+    var previous = 0;
+    for (var i = 0; i < cumulative.length; i++) {
+      var current = Number(cumulative[i]) || 0;
+      weekly.push(Math.max(0, current - previous));
+      previous = current;
+    }
+    return weekly;
+  }
+
   function generateReport() {
     // Try to get gameGroup from localStorage (set by admin.js)
     var gameGroupData = null;
@@ -236,7 +310,6 @@
         var user = group.users[u];
         if (!user) continue;
         
-        var orderHistory = user.orderHistory || [];
         var inventoryHistory = user.inventoryHistory || [];
         var backlogHistory = user.backlogHistory || [];
         
@@ -253,42 +326,11 @@
           }
         }
         
-        // Calculate metrics
-        var orders = orderHistory.filter(function(x) { return !isNaN(x) && x !== undefined; });
-        var mean = orders.length > 0 ? orders.reduce(function(a, b) { return a + b; }, 0) / orders.length : 0;
-        var variance = orders.length > 0 ? orders.reduce(function(a, b) { return a + Math.pow(b - mean, 2); }, 0) / orders.length : 0;
-        var stdDev = Math.sqrt(variance);
-        var cv = mean > 0 ? stdDev / mean : 0;  // Coefficient of Variation
-        
-        // Order range
-        var maxOrder = orders.length > 0 ? Math.max.apply(null, orders) : 0;
-        var minOrder = orders.length > 0 ? Math.min.apply(null, orders) : 0;
-        var orderRange = maxOrder - minOrder;
-        
-        // Bullwhip ratio: compare with downstream demand variance
-        var downstreamCV = 0;
-        if (downstreamOrders.length > 0) {
-          var downMean = downstreamOrders.reduce(function(a, b) { return a + b; }, 0) / downstreamOrders.length;
-          var downVar = downstreamOrders.reduce(function(a, b) { return a + Math.pow(b - downMean, 2); }, 0) / downstreamOrders.length;
-          var downStd = Math.sqrt(downVar);
-          downstreamCV = downMean > 0 ? downStd / downMean : 0;
-        }
-        
-        // Bullwhip ratio: this role's CV / downstream CV
-        // If ratio > 1, demand is amplified (bullwhip effect)
-        var bullwhipRatio = downstreamCV > 0 ? cv / downstreamCV : 1;
-        
-        // Alternative: simple amplification = max order / max downstream order
-        var downstreamMax = downstreamOrders.length > 0 ? Math.max.apply(null, downstreamOrders.filter(function(x) { return !isNaN(x); })) : 0;
-        var simpleAmplify = downstreamMax > 0 ? maxOrder / downstreamMax : 1;
-        
-        // Final bullwhip score (0-100)
-        // Higher score = more severe bullwhip effect
-        var bullwhipScore = 0;
-        if (orders.length >= 3) {
-          // Use the larger of CV-based ratio or simple amplification
-          var effect = Math.max(bullwhipRatio, simpleAmplify);
-          bullwhipScore = Math.min(100, Math.round((effect - 1) * 50));  // 0 = no effect, 100 = severe
+        var metrics = calculateOrderMetrics(user.orderHistory, downstreamOrders, maxWeeks);
+        var weeklyCosts = weeklyCostFromHistory(user.costHistory, user.cost || 0);
+        var weeklyBullwhip = [];
+        for (var bwWeek = 1; bwWeek <= metrics.orders.length && bwWeek <= maxWeeks; bwWeek++) {
+          weeklyBullwhip.push(calculateOrderMetrics(user.orderHistory, downstreamOrders, bwWeek).bullwhipScore);
         }
         
         bullwhipData.push({
@@ -297,14 +339,16 @@
           finalCost: user.cost || 0,
           finalInventory: user.inventory || 0,
           finalBacklog: user.backlog || 0,
-          mean: mean,
-          stdDev: stdDev,
-          cv: cv,
-          orderRange: orderRange,
-          orderHistory: orders,
-          bullwhipRatio: bullwhipRatio,
-          simpleAmplify: simpleAmplify,
-          bullwhipScore: bullwhipScore
+          mean: metrics.mean,
+          stdDev: metrics.stdDev,
+          cv: metrics.cv,
+          orderRange: metrics.orderRange,
+          orderHistory: metrics.orders,
+          weeklyCosts: weeklyCosts,
+          weeklyBullwhip: weeklyBullwhip,
+          bullwhipRatio: metrics.bullwhipRatio,
+          simpleAmplify: metrics.simpleAmplify,
+          bullwhipScore: metrics.bullwhipScore
         });
       }
       
@@ -408,7 +452,42 @@
         '</tr>';
       }
 
+      var weeklyDetailWeeks = 0;
+      for (var wu = 0; wu < bullwhipData.length; wu++) {
+        weeklyDetailWeeks = Math.max(weeklyDetailWeeks, bullwhipData[wu].weeklyCosts.length, bullwhipData[wu].weeklyBullwhip.length);
+      }
+      weeklyDetailWeeks = Math.min(maxWeeks, weeklyDetailWeeks);
+      var weeklyDetailHtml = '';
+      if (weeklyDetailWeeks > 0) {
+        weeklyDetailHtml += '<div style="margin-top:14px;font-size:11px;color:#888;">玩家每周成本与牛鞭分：</div>' +
+          '<div class="weekly-detail-wrap"><table class="weekly-detail-table">' +
+            '<thead><tr><th class="player-col">玩家</th><th class="role-col">角色</th>';
+        for (var wh = 0; wh < weeklyDetailWeeks; wh++) {
+          weeklyDetailHtml += '<th>W' + (wh + 1) + '</th>';
+        }
+        weeklyDetailHtml += '</tr></thead><tbody>';
+        for (var wr = 0; wr < bullwhipData.length; wr++) {
+          var wd = bullwhipData[wr];
+          weeklyDetailHtml += '<tr><td class="player-col">' + escapeHtml(wd.name) + '</td><td class="role-col">' + escapeHtml(wd.role) + '</td>';
+          for (var wc = 0; wc < weeklyDetailWeeks; wc++) {
+            var weekCost = wd.weeklyCosts[wc];
+            var weekBullwhip = wd.weeklyBullwhip[wc];
+            weeklyDetailHtml += '<td>';
+            if (weekCost === undefined && weekBullwhip === undefined) {
+              weeklyDetailHtml += '-';
+            } else {
+              weeklyDetailHtml += '<span class="weekly-cell-cost">成本 ¥' + Math.round(Number(weekCost) || 0) + '</span>' +
+                '<span class="weekly-cell-bullwhip">牛鞭 ' + Math.round(Number(weekBullwhip) || 0) + '%</span>';
+            }
+            weeklyDetailHtml += '</td>';
+          }
+          weeklyDetailHtml += '</tr>';
+        }
+        weeklyDetailHtml += '</tbody></table></div>';
+      }
+
       html += '</tbody></table>' +
+        weeklyDetailHtml +
         '<div style="margin-top:10px;font-size:11px;color:#888;">团队每周下单总量：</div>' +
         '<div class="mini-chart">' + barsHtml + '</div>' +
         '<div style="margin-top:12px;font-size:11px;color:#888;">累计总成本趋势：</div>' +

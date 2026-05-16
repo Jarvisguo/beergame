@@ -82,10 +82,10 @@ const groupWithFullOrderHistory = [{
   week: 27,
   cost: 100,
   users: [
-    { name: 'A', role: makeRole('零售商', '客户'), cost: 10, inventory: 1, backlog: 0, orderHistory: Array.from({ length: 26 }, (_, i) => i + 1) },
-    { name: 'B', role: makeRole('批发商', '零售商'), cost: 20, inventory: 2, backlog: 0, orderHistory: Array.from({ length: 26 }, (_, i) => i + 2) },
-    { name: 'C', role: makeRole('区域仓库', '批发商'), cost: 30, inventory: 3, backlog: 0, orderHistory: Array.from({ length: 26 }, (_, i) => i + 3) },
-    { name: 'D', role: makeRole('工厂', '区域仓库'), cost: 40, inventory: 4, backlog: 0, orderHistory: Array.from({ length: 26 }, (_, i) => i + 4) },
+    { name: 'A', role: makeRole('零售商', '客户'), cost: 10, costHistory: [2, 5, 10], inventory: 1, backlog: 0, orderHistory: Array.from({ length: 26 }, (_, i) => i + 1) },
+    { name: 'B', role: makeRole('批发商', '零售商'), cost: 20, costHistory: [3, 9, 20], inventory: 2, backlog: 0, orderHistory: Array.from({ length: 26 }, (_, i) => i + 2) },
+    { name: 'C', role: makeRole('区域仓库', '批发商'), cost: 30, costHistory: [4, 14, 30], inventory: 3, backlog: 0, orderHistory: Array.from({ length: 26 }, (_, i) => i + 3) },
+    { name: 'D', role: makeRole('工厂', '区域仓库'), cost: 40, costHistory: [5, 20, 40], inventory: 4, backlog: 0, orderHistory: Array.from({ length: 26 }, (_, i) => i + 4) },
   ],
 }];
 
@@ -99,5 +99,9 @@ assert.match(full.elements.groupsContainer.innerHTML, /W26: 110/);
 assert.doesNotMatch(full.elements.groupsContainer.innerHTML, /W27:/);
 assert.match(full.elements.groupsContainer.innerHTML, /团队每周下单总量/);
 assert.match(full.elements.groupsContainer.innerHTML, /累计总成本趋势/);
+assert.match(full.elements.groupsContainer.innerHTML, /玩家每周成本与牛鞭分/);
+assert.match(full.elements.groupsContainer.innerHTML, /<th>W3<\/th>/);
+assert.match(full.elements.groupsContainer.innerHTML, /成本 ¥3/);
+assert.match(full.elements.groupsContainer.innerHTML, /牛鞭 \d+%/);
 
 console.log('report render test passed');
