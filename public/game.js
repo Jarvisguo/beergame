@@ -225,9 +225,9 @@ function setFlowState(state, data = {}) {
     $('#btnOrder').disabled = false;
     setTimeout(() => $('#orderInput').focus(), 100);
   } else if (state === 'waiting-others') {
-    const names = data.waiting && data.waiting.length ? data.waiting.join('、') : '';
-    $('#waitingOthersText').innerHTML = names
-      ? `已提交订单。还在等：<strong>${names}</strong>`
+    const roles = data.waiting && data.waiting.length ? data.waiting.join('、') : '';
+    $('#waitingOthersText').innerHTML = roles
+      ? `已提交订单。还未提交：<strong>${roles}</strong>`
       : '已提交订单，等待其他人...';
     $('#orderInput').disabled = true;
     $('#btnOrder').disabled = true;
@@ -552,9 +552,15 @@ $('#btnOrder').addEventListener('click', (e) => {
   }
 
   const amount = parseInt(val, 10);
+  $('#btnOrder').disabled = true;
+  $('#orderInput').disabled = true;
   socket.emit('submit order', val, (resp) => {
     if (resp && resp.err) {
       showToast(resp.err, 3000);
+      if (!submittedOrder) {
+        $('#btnOrder').disabled = false;
+        $('#orderInput').disabled = false;
+      }
       return;
     }
     submittedOrder = true;
