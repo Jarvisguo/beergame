@@ -5,6 +5,7 @@ export const BACKLOG_COST = 1;
 export const STARTING_INVENTORY = 12;
 export const STARTING_THROUGHPUT = 4;
 export const MAX_WEEKS = 26;
+export const MAX_ORDER_QUANTITY = 100;
 export const DEFAULT_DEMAND_TREND = 'mixed';
 
 export const BEER_NAMES = ['零售商', '批发商', '区域仓库', '工厂'];

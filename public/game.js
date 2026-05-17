@@ -3,6 +3,7 @@
  * ======================================================================== */
 
 const MAX_WEEKS = 26;
+const MAX_ORDER_QUANTITY = 100;
 
 // ── DOM refs ──────────────────────────────────────────────────────────
 const $ = (sel) => document.querySelector(sel);
@@ -552,6 +553,10 @@ $('#btnOrder').addEventListener('click', (e) => {
   }
 
   const amount = parseInt(val, 10);
+  if (amount > MAX_ORDER_QUANTITY) {
+    showToast(`订单数量不能超过 ${MAX_ORDER_QUANTITY}。`);
+    return;
+  }
   $('#btnOrder').disabled = true;
   $('#orderInput').disabled = true;
   socket.emit('submit order', val, (resp) => {

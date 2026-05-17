@@ -442,6 +442,13 @@ async function assertOrderValidation() {
     // G3: 非整数被拒绝
     const floatRejected = await emit(players[0], 'submit order', 1.5);
     assert.ok(floatRejected && floatRejected.err, 'float order should be rejected');
+
+    const overLimitRejected = await emit(players[0], 'submit order', 101);
+    assert.ok(overLimitRejected && overLimitRejected.err, 'order over 100 should be rejected');
+    assert.match(overLimitRejected.err, /不能超过 100/);
+
+    const maxAccepted = await emit(players[0], 'submit order', 100);
+    assert.ok(Array.isArray(maxAccepted), 'order equal to 100 should be accepted');
   } finally {
     admin.close();
     players.forEach((socket) => socket && socket.close());

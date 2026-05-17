@@ -7,6 +7,7 @@ import {
   BEER_NAMES,
   STARTING_THROUGHPUT,
   MAX_WEEKS,
+  MAX_ORDER_QUANTITY,
   DEMAND_PROFILES,
   RECONNECT_GRACE_MS,
 } from '../config.js';
@@ -202,6 +203,9 @@ export function registerPlayerHandlers(io: Server, socket: Socket): void {
     const parsed = parseInt(String(order).trim(), 10);
     if (isNaN(parsed) || parsed < 0 || !/^\d+$/.test(String(order).trim())) {
       return ack(callback, { err: '订单数量必须是有效的非负整数。' });
+    }
+    if (parsed > MAX_ORDER_QUANTITY) {
+      return ack(callback, { err: `订单数量不能超过 ${MAX_ORDER_QUANTITY}。` });
     }
 
     log('INFO', `order: ${name} group=${user.group} amount=${parsed}`);
