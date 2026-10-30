@@ -81,14 +81,8 @@ document.addEventListener('visibilitychange', () => {
 // ── Helpers ───────────────────────────────────────────────────────────
 function hasCompleted() { return curWeek > MAX_WEEKS; }
 
-function calcBullwhip(orderHistory) {
-  if (!orderHistory || orderHistory.length < 2) return null;
-  const mean = orderHistory.reduce((a, b) => a + b, 0) / orderHistory.length;
-  const variance = orderHistory.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / orderHistory.length;
-  const cv = Math.sqrt(variance) / (mean || 1);
-  const cls = cv < 0.1 ? 'tag-green' : cv < 0.3 ? 'tag-yellow' : 'tag-red';
-  const label = cv < 0.1 ? '稳定' : cv < 0.3 ? '波动' : '剧烈';
-  return { cv, cls, label };
+function calcBullwhip(user) {
+  return BeerMetrics.forUser(user, BeerMetrics.completedWeeks(curWeek));
 }
 
 function animateNum(el, from, to, dec = 0) {
@@ -202,12 +196,8 @@ function updateAnalytics() {
 
   // Bullwhip
   if (curUser && curUser.orderHistory) {
-    const bw = calcBullwhip(curUser.orderHistory);
-    if (!bw) {
-      $('#bullwhip').innerHTML = '<span class="tag tag-gray">数据不足</span>';
-    } else {
-      $('#bullwhip').innerHTML = `<span class="tag ${bw.cls}">${bw.label} (CV:${(bw.cv * 100).toFixed(0)}%)</span>`;
-    }
+    const bw = calcBullwhip(curUser);
+    $('#bullwhip').innerHTML = BeerMetrics.badge(bw) + BeerMetrics.details(bw);
   }
 
   // Supply chain status
@@ -268,10 +258,7 @@ function updateGroupTable() {
   rows.forEach((tr, i) => {
     if (!curGroup.users[i]) return;
     const u = curGroup.users[i];
-    const bw = calcBullwhip(u.orderHistory);
-    const bwCell = bw
-      ? `<span class="tag ${bw.cls}">${bw.label} (${(bw.cv * 100).toFixed(0)}%)</span>`
-      : '<span class="tag tag-gray">—</span>';
+    const bwCell = BeerMetrics.badge(calcBullwhip(u));
     if (i === userIdx) {
       tr.innerHTML = `<td>${i + 1}</td><td>${escapeHtml(u.name)}</td><td>${u.role.name}</td><td>${bwCell}</td>`;
       tr.className = 'active';
@@ -288,6 +275,7 @@ function updateGroupTable() {
 // ── Next turn ─────────────────────────────────────────────────────────
 function nextTurn(users, week, user) {
   curUser = user;
+  if (curGroup && curGroup.users) curGroup.users[userIdx] = user;
   if (typeof users === 'number') numUsers = users;
   curWeek = week;
   updateStatus(); updateAnalytics(); updateBoard();
@@ -507,6 +495,11 @@ socket.on('game started', (msg) => {
 });
 
 socket.on('next turn', (msg) => {
+  if (curGroup && Array.isArray(msg.analytics)) {
+    msg.analytics.forEach((history, index) => {
+      if (curGroup.users[index]) Object.assign(curGroup.users[index], history);
+    });
+  }
   if (msg.waitingForOrders && curGroup) {
     curGroup.waitingForOrders = msg.waitingForOrders;
   }

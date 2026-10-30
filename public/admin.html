@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>管理后台 - 啤酒分销游戏</title>
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="bullwhip.css">
 </head>
 <body>
 
@@ -44,7 +45,7 @@
               <th id="groupRank">团队 #</th>
               <th>零售商</th><th>批发商</th><th>区域仓库</th><th>工厂</th>
               <th class="num-col">总库存</th><th class="num-col">总积压</th>
-              <th class="num-col">团队总成本</th><th class="num-col">牛鞭效应</th>
+              <th class="num-col">团队总成本</th><th class="num-col">本组最大方差放大倍数</th>
               <th>待下单</th><th></th>
             </tr></thead>
             <tbody id="adminTbody"></tbody>
@@ -94,6 +95,7 @@
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
+<script src="bullwhip.js"></script>
 <script src="admin.js"></script>
 </body>
 </html>

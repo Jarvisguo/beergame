@@ -37,6 +37,8 @@ export function advanceTurn(g: Group, groupIndex: number, onSocketEmit: EmitFn):
       user.backlogHistory = [];
       user.costHistory = [];
       user.orderHistory = [];
+      user.demandHistory = [];
+      user.historyStartWeek = 1;
     }
     user.costHistory.push(user.cost);
     user.inventoryHistory.push(user.inventory);
@@ -68,7 +70,9 @@ export function advanceTurn(g: Group, groupIndex: number, onSocketEmit: EmitFn):
     } else {
       g.mailing[i].push(user.role.upstream.orders);
     }
-    user.orderHistory.push(user.role.upstream.orders);
+    if (g.week > 0) user.orderHistory.push(user.role.upstream.orders);
+    // Week zero is setup, not a settled player decision. Never invent old demand data.
+    if (g.week > 0 && user.demandHistory) user.demandHistory.push(user.role.downstream.orders);
     user.cost += user.inventory * INVENTORY_COST + user.backlog * BACKLOG_COST;
   }
 
@@ -84,6 +88,11 @@ export function advanceTurn(g: Group, groupIndex: number, onSocketEmit: EmitFn):
       week: g.week,
       numUsers: state.numUsers,
       update: u,
+      analytics: g.users.map(member => ({
+        orderHistory: member.orderHistory,
+        demandHistory: member.demandHistory,
+        historyStartWeek: member.historyStartWeek,
+      })),
       waitingForOrders: g.waitingForOrders,
     }, u.socketId);
   }

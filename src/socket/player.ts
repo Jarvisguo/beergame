@@ -35,6 +35,8 @@ function initGroup(io: Server, groupIndex: number): void {
     g.users[j].backlogHistory = [];
     g.users[j].costHistory = [];
     g.users[j].orderHistory = [];
+    g.users[j].demandHistory = [];
+    g.users[j].historyStartWeek = 1;
   }
   if (g.users[0]) {
     g.users[0].role.downstream.orders = customerDemand(1, g.demandTrend);

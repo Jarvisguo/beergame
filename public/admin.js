@@ -41,20 +41,7 @@ function formatWeek(g) {
 }
 
 function calcGroupBullwhip(g) {
-  if (!g.users || g.users.length === 0) return null;
-  let maxCV = -1;
-  for (const u of g.users) {
-    const orders = (u.orderHistory || []).filter(x => typeof x === 'number');
-    if (orders.length < 2) continue;
-    const mean = orders.reduce((a, b) => a + b, 0) / orders.length;
-    const variance = orders.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / orders.length;
-    const cv = Math.sqrt(variance) / (mean || 1);
-    if (cv > maxCV) maxCV = cv;
-  }
-  if (maxCV < 0) return null;
-  if (maxCV >= 0.3) return { label: '剧烈', cls: 'tag-red' };
-  if (maxCV >= 0.1) return { label: '波动', cls: 'tag-yellow' };
-  return { label: '稳定', cls: 'tag-green' };
+  return BeerMetrics.summarize(g.users, BeerMetrics.completedWeeks(g.week));
 }
 
 function updateAdminStatus() {
@@ -115,9 +102,9 @@ function refreshTable(groups, gameStarted, displayOrder = null) {
       const cost = g.cost || 0;
       html += `<td>¥${cost.toFixed(0)}</td>`;
       const bw = calcGroupBullwhip(g);
-      html += bw
-        ? `<td><span class="tag ${bw.cls}">${bw.label}</span></td>`
-        : '<td>—</td>';
+      const roles = bw.maxIndices.map(index => escapeHtml(g.users[index].role.name)).join('、');
+      html += '<td>' + (bw.max ? BeerMetrics.badge(bw.max) + '<div class="bw-detail">最大值角色：' + roles + '</div>' : '暂无可计算倍数') +
+        '<div class="bw-detail">' + BeerMetrics.coverage(bw) + '<br>已完成 ' + BeerMetrics.completedWeeks(g.week) + ' 周</div></td>';
     } else {
       html += '<td>—</td><td>—</td>';
     }

@@ -1,0 +1,15 @@
+.bw-badge { display: inline-block; padding: 4px 8px; border-radius: 5px; font-size: 12px; font-weight: 600; line-height: 1.5; white-space: normal; overflow-wrap: anywhere; }
+.bw-0 { background: #dcfce7; color: #166534; }
+.bw-1 { background: #fef9c3; color: #854d0e; }
+.bw-2 { background: #ffedd5; color: #9a3412; }
+.bw-3 { background: #fee2e2; color: #991b1b; }
+.bw-4 { background: #881337; color: #fff; }
+.bw-neutral { background: #f1f5f9; color: #475569; }
+.bw-detail { margin-top: 6px; font-size: 11px; font-weight: normal; line-height: 1.6; color: #526176; }
+.bw-method { margin: 12px 0; font-size: 13px; line-height: 1.8; color: #475569; }
+.bw-chart { margin: 16px 0; break-inside: avoid; }
+.bw-chart svg { display: block; width: 100%; height: auto; max-height: 240px; }
+.bw-chart figcaption { font-size: 12px; color: #334155; margin-bottom: 6px; }
+.bw-table-wrap { overflow-x: auto; }
+@media (max-width: 767px) { .bullwhip-card { grid-column: 1 / -1; } }
+@media print { .bw-badge { print-color-adjust: exact; -webkit-print-color-adjust: exact; } .bw-table-wrap { overflow: visible; } }

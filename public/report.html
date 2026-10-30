@@ -71,6 +71,7 @@
     .key-insight strong { display: block; margin-bottom: 5px; font-size: 14px; }
     .key-insight span { font-size: 13px; opacity: 0.9; }
   </style>
+  <link rel="stylesheet" href="bullwhip.css">
 </head>
 <body>
 
@@ -88,6 +89,9 @@
 
 <div class="summary-box">
   <h3>📊 全局概览</h3>
+  <p class="bw-method">牛鞭效应 B = 订货方差 ÷ 当周实际收到的新增需求方差（不含积压）；累计统计第 1—26 周。<br>
+  分档：0—1 未放大；大于1至2 轻度；大于2至4 中度；大于4至8 高度；大于8 极高。属于本游戏课堂展示规则。<br>
+  满5周后分档，需求恒定或记录不完整时不计算倍数。未放大不等于经营优秀，须结合成本与积压。可计算小组指至少一个角色有有效倍数。</p>
   <p>仅统计已完成全部 26 周的小组；未完成小组不计入汇总、排名或明细。</p>
   <div class="metrics-grid" id="globalMetrics">
     <div class="metric-item">
@@ -115,15 +119,15 @@
       <div class="metric-value" id="weekSummary" style="font-size:12px;">-</div>
     </div>
     <div class="metric-item">
-      <div class="metric-label">平均牛鞭分</div>
+      <div class="metric-label">可计算小组 / 完成小组</div>
       <div class="metric-value" id="avgBullwhip">-</div>
     </div>
     <div class="metric-item">
-      <div class="metric-label">严重牛鞭团队</div>
+      <div class="metric-label">高度或极高 / 可计算小组</div>
       <div class="metric-value cost" id="severeBullwhip">-</div>
     </div>
     <div class="metric-item">
-      <div class="metric-label">最高牛鞭分</div>
+      <div class="metric-label">最大可计算方差倍数</div>
       <div class="metric-value cost" id="maxBullwhipScore">-</div>
     </div>
   </div>
@@ -152,6 +156,7 @@
   本报告由帕克自动生成 🍺🦐
 </div>
 
+<script src="bullwhip.js"></script>
 <script>
   // Generate report from current game state
   var maxWeeks = 26;
@@ -172,68 +177,54 @@
       .replace(/'/g, '&#39;');
   }
 
-  function numericHistory(history, fallback) {
-    var values = Array.isArray(history) ? history : [];
-    var result = [];
-    for (var i = 0; i < values.length && i < maxWeeks; i++) {
-      var value = Number(values[i]);
-      if (!isNaN(value)) result.push(value);
-    }
-    if (result.length === 0 && fallback !== undefined && !isNaN(Number(fallback))) {
-      result.push(Number(fallback));
-    }
+  // SVG charts keep missing values as gaps instead of treating them as zero.
+  function historyChart(title, series, unit) {
+    var values = series.flatMap(function(line) { return line.values; }).filter(Number.isFinite);
+    if (!values.length) return '<p class="bw-detail">' + escapeHtml(title) + '：暂无可计算数据。</p>';
+    var ceiling = Math.max.apply(null, values.concat([1]));
+    var count = Math.max.apply(null, series.map(function(line) { return line.values.length; }));
+    var svg = '<svg viewBox="0 0 640 190" role="img" aria-label="' + escapeHtml(title) + '"><title>' + escapeHtml(title) + '</title>';
+    svg += '<path d="M50 15V155H620" fill="none" stroke="#94a3b8"/>';
+    svg += '<g fill="#64748b" font-size="11"><text x="4" y="24">' + ceiling.toFixed(1) + escapeHtml(unit) + '</text><text x="30" y="158">0</text><text x="50" y="177">第1周</text><text x="565" y="177">第' + count + '周</text></g>';
+    series.forEach(function(line) {
+      var path = '', connected = false;
+      line.values.forEach(function(v, index) {
+        if (!Number.isFinite(v)) { connected = false; return; }
+        var x = 50 + index * 570 / Math.max(1, count - 1), y = 155 - v * 130 / ceiling;
+        path += (connected ? 'L' : 'M') + x.toFixed(2) + ' ' + y.toFixed(2) + ' ';
+        connected = true;
+        svg += '<circle cx="' + x + '" cy="' + y + '" r="2.5" fill="' + line.color + '"><title>第' + (index + 1) + '周 · ' + escapeHtml(line.name) + '：' + v.toFixed(2) + escapeHtml(unit) + '</title></circle>';
+      });
+      svg += '<path d="' + path + '" fill="none" stroke="' + line.color + '" stroke-width="2"' + (line.dashed ? ' stroke-dasharray="6 4"' : '') + '/>';
+    });
+    svg += '</svg>';
+    return '<figure class="bw-chart"><figcaption>' + escapeHtml(title) + '</figcaption>' + svg + '<div class="bw-detail">' +
+      series.map(function(line) { return '<span style="color:' + line.color + '">' + (line.dashed ? '┄ ' : '━ ') + escapeHtml(line.name) + '</span>'; }).join('　') + '</div></figure>';
+  }
+
+  function alignHistory(history, startWeek) {
+    var result = Array(maxWeeks).fill(null);
+    // A complete 26-entry legacy history has an unambiguous week range; short legacy histories do not.
+    var start = Number.isInteger(startWeek) ? startWeek : (Array.isArray(history) && history.length === maxWeeks ? 1 : null);
+    if (!start || start < 1 || start > maxWeeks || !Array.isArray(history)) return result;
+    history.forEach(function(value, index) {
+      if (start + index <= maxWeeks && typeof value === 'number' && Number.isFinite(value) && value >= 0) result[start + index - 1] = value;
+    });
     return result;
   }
 
-  function calculateOrderMetrics(orderHistory, downstreamOrders, weekLimit) {
-    var limit = weekLimit || maxWeeks;
-    var orders = numericHistory(orderHistory).slice(0, limit);
-    var downstream = numericHistory(downstreamOrders).slice(0, limit);
-    var mean = orders.length > 0 ? orders.reduce(function(a, b) { return a + b; }, 0) / orders.length : 0;
-    var variance = orders.length > 0 ? orders.reduce(function(a, b) { return a + Math.pow(b - mean, 2); }, 0) / orders.length : 0;
-    var stdDev = Math.sqrt(variance);
-    var cv = mean > 0 ? stdDev / mean : 0;
-    var maxOrder = orders.length > 0 ? Math.max.apply(null, orders) : 0;
-    var minOrder = orders.length > 0 ? Math.min.apply(null, orders) : 0;
-    var orderRange = maxOrder - minOrder;
-
-    var downstreamCV = 0;
-    if (downstream.length > 0) {
-      var downMean = downstream.reduce(function(a, b) { return a + b; }, 0) / downstream.length;
-      var downVar = downstream.reduce(function(a, b) { return a + Math.pow(b - downMean, 2); }, 0) / downstream.length;
-      var downStd = Math.sqrt(downVar);
-      downstreamCV = downMean > 0 ? downStd / downMean : 0;
-    }
-
-    var bullwhipRatio = downstreamCV > 0 ? cv / downstreamCV : 1;
-    var downstreamMax = downstream.length > 0 ? Math.max.apply(null, downstream) : 0;
-    var simpleAmplify = downstreamMax > 0 ? maxOrder / downstreamMax : 1;
-    var bullwhipScore = 0;
-    if (orders.length >= 3) {
-      var effect = Math.max(bullwhipRatio, simpleAmplify);
-      bullwhipScore = Math.min(100, Math.max(0, Math.round((effect - 1) * 50)));
-    }
-
-    return {
-      orders: orders,
-      mean: mean,
-      stdDev: stdDev,
-      cv: cv,
-      orderRange: orderRange,
-      bullwhipRatio: bullwhipRatio,
-      simpleAmplify: simpleAmplify,
-      bullwhipScore: bullwhipScore
-    };
-  }
-
-  function weeklyCostFromHistory(costHistory, finalCost) {
-    var cumulative = numericHistory(costHistory, finalCost);
-    var weekly = [];
-    var previous = 0;
-    for (var i = 0; i < cumulative.length; i++) {
-      var current = Number(cumulative[i]) || 0;
-      weekly.push(Math.max(0, current - previous));
-      previous = current;
+  function weeklyCostFromHistory(costHistory, finalCost, startWeek) {
+    var weekly = Array(maxWeeks).fill(null);
+    var start = Number.isInteger(startWeek) ? startWeek : (Array.isArray(costHistory) && costHistory.length === maxWeeks ? 1 : null);
+    if (!start || start < 1 || start > maxWeeks || !Array.isArray(costHistory)) return weekly;
+    var expected = maxWeeks - start + 1;
+    if (costHistory.length !== expected) return weekly;
+    // The server stores cost BEFORE each settlement; the final total supplies the last endpoint.
+    for (var i = 0; i < expected; i++) {
+      var before = costHistory[i], after = i + 1 < expected ? costHistory[i + 1] : finalCost;
+      if (typeof before === 'number' && Number.isFinite(before) && typeof after === 'number' && Number.isFinite(after) && before >= 0 && after >= before) {
+        weekly[start + i - 1] = after - before;
+      }
     }
     return weekly;
   }
@@ -328,65 +319,40 @@
         var inventoryHistory = user.inventoryHistory || [];
         var backlogHistory = user.backlogHistory || [];
         
-        // Get downstream orders (what this role receives)
-        var downstreamOrders = [];
-        if (user.role && user.role.downstream && user.role.downstream.name !== '客户') {
-          // Find the upstream role in the chain
-          var downstreamName = user.role.downstream.name;
-          var downstreamUser = group.users.find(function(ru) {
-            return ru && ru.role && ru.role.name === downstreamName;
-          });
-          if (downstreamUser) {
-            downstreamOrders = downstreamUser.orderHistory || [];
-          }
-        }
-        
-        var metrics = calculateOrderMetrics(user.orderHistory, downstreamOrders, maxWeeks);
-        var weeklyCosts = weeklyCostFromHistory(user.costHistory, user.cost || 0);
+        var metrics = BeerMetrics.forUser(user, maxWeeks);
+        var retailer = group.users.find(function(member) { return member.role && member.role.name === '零售商'; });
+        var customerMetric = BeerMetrics.calculate(user.orderHistory,
+          retailer && retailer.historyStartWeek === 1 ? retailer.demandHistory : undefined, maxWeeks, user.historyStartWeek);
+        var weeklyCosts = weeklyCostFromHistory(user.costHistory, user.cost, user.historyStartWeek);
         var weeklyBullwhip = [];
-        for (var bwWeek = 1; bwWeek <= metrics.orders.length && bwWeek <= maxWeeks; bwWeek++) {
-          weeklyBullwhip.push(calculateOrderMetrics(user.orderHistory, downstreamOrders, bwWeek).bullwhipScore);
+        for (var bwWeek = 1; bwWeek <= maxWeeks; bwWeek++) {
+          weeklyBullwhip.push(BeerMetrics.forUser(user, bwWeek));
         }
-        
+
         bullwhipData.push({
           name: user.name || '玩家',
           role: user.role && user.role.name ? user.role.name : '未知角色',
           finalCost: user.cost || 0,
           finalInventory: user.inventory || 0,
           finalBacklog: user.backlog || 0,
-          mean: metrics.mean,
-          stdDev: metrics.stdDev,
-          cv: metrics.cv,
-          orderRange: metrics.orderRange,
-          orderHistory: metrics.orders,
+          mean: metrics.orders ? metrics.orders.mean : null,
+          stdDev: metrics.orders ? metrics.orders.stdDev : null,
+          cv: metrics.orders ? metrics.orders.cv : null,
+          orderHistory: alignHistory(user.orderHistory, user.historyStartWeek),
+          demandHistory: user.demandHistory,
           weeklyCosts: weeklyCosts,
           weeklyBullwhip: weeklyBullwhip,
-          bullwhipRatio: metrics.bullwhipRatio,
-          simpleAmplify: metrics.simpleAmplify,
-          bullwhipScore: metrics.bullwhipScore
+          metric: metrics,
+          customerMetric: customerMetric
         });
       }
       
-      // Team bullwhip: max score among all roles
-      var maxBullwhip = bullwhipData.length > 0
-        ? Math.max.apply(null, bullwhipData.map(function(d) { return d.bullwhipScore; }))
-        : 0;
-      allBullwhipScores.push(maxBullwhip);
-      
-      // Determine bullwhip level
-      var bullwhipLevel = 'low';
-      var bullwhipLabel = '无牛鞭效应';
-      if (maxBullwhip > 50) {
-        bullwhipLevel = 'high';
-        bullwhipLabel = '严重牛鞭效应';
-      } else if (maxBullwhip > 20) {
-        bullwhipLevel = 'medium';
-        bullwhipLabel = '中等牛鞭效应';
-      } else if (maxBullwhip > 5) {
-        bullwhipLevel = 'low';
-        bullwhipLabel = '轻微牛鞭效应';
-      }
-      
+      var teamMetrics = BeerMetrics.summarize(group.users, maxWeeks);
+      if (teamMetrics.max) allBullwhipScores.push(teamMetrics.max.ratio);
+      var maxRoles = teamMetrics.maxIndices.map(function(index) { return escapeHtml(group.users[index].role.name); }).join('、');
+      var bullwhipLabel = (teamMetrics.max ? BeerMetrics.badge(teamMetrics.max) : '暂无可计算倍数') +
+        '<div class="bw-detail">' + (maxRoles ? '最大值角色：' + maxRoles + '<br>' : '') + BeerMetrics.coverage(teamMetrics) + '</div>';
+
       // Calculate team metrics
       var maxInventory = bullwhipData.length > 0
         ? Math.max.apply(null, bullwhipData.map(function(d) { return d.finalInventory; }))
@@ -396,16 +362,17 @@
 
       // Generate mini bar chart for group: aggregate all role orders by week.
       var barsHtml = '';
-      var weeklyOrders = [];
-      for (var u = 0; u < bullwhipData.length; u++) {
-        var roleOrders = bullwhipData[u].orderHistory || [];
-        for (var w = 0; w < roleOrders.length && w < maxWeeks; w++) {
-          weeklyOrders[w] = (weeklyOrders[w] || 0) + roleOrders[w];
-        }
-      }
+      var weeklyOrders = Array.from({ length: maxWeeks }, function(_, week) {
+        var values = bullwhipData.map(function(role) { return role.orderHistory[week]; });
+        return values.length === 4 && values.every(Number.isFinite) ? values.reduce(function(sum, value) { return sum + value; }, 0) : null;
+      });
       if (weeklyOrders.length > 0) {
-        var maxAllOrder = Math.max.apply(null, weeklyOrders);
+        var maxAllOrder = Math.max.apply(null, weeklyOrders.filter(Number.isFinite).concat([1]));
         for (var w = 0; w < weeklyOrders.length; w++) {
+          if (!Number.isFinite(weeklyOrders[w])) {
+            barsHtml += '<div style="flex:1" title="第' + (w + 1) + '周：团队订单记录不完整">—</div>';
+            continue;
+          }
           var height = maxAllOrder > 0 ? (weeklyOrders[w] / maxAllOrder) * 100 : 0;
           var barClass = '';
           if (w < 8) barClass = 'week1';
@@ -446,24 +413,23 @@
             '<div class="metric-item"><div class="metric-label">总成本</div><div class="metric-value cost">¥' + Math.round(group.cost) + '</div></div>' +
             '<div class="metric-item"><div class="metric-label">最高库存</div><div class="metric-value">' + Math.round(maxInventory) + '</div></div>' +
             '<div class="metric-item"><div class="metric-label">积压总计</div><div class="metric-value">' + Math.round(totalBacklog) + '</div></div>' +
-            '<div class="metric-item"><div class="metric-label">牛鞭程度</div><div class="metric-value"><span class="bullwhip-indicator bullwhip-' + bullwhipLevel + '">' + bullwhipLabel + '</span></div></div>' +
+            '<div class="metric-item"><div class="metric-label">本组最大方差放大倍数</div><div class="metric-value">' + bullwhipLabel + '</div></div>' +
           '</div>' +
-          '<table class="role-table">' +
-            '<thead><tr><th>角色</th><th>玩家</th><th>成本</th><th>库存</th><th>积压</th><th>均值</th><th>波动</th><th>牛鞭分</th></tr></thead>' +
+          '<div class="bw-table-wrap"><table class="role-table">' +
+            '<thead><tr><th>角色</th><th>玩家</th><th>成本</th><th>库存</th><th>积压</th><th>均值</th><th>订货标准差 / CV</th><th>本环节放大倍数</th><th>相对客户需求</th></tr></thead>' +
             '<tbody>';
 
       for (var u = 0; u < bullwhipData.length; u++) {
         var rd = bullwhipData[u];
-        var bClass = rd.bullwhipScore > 50 ? 'high' : (rd.bullwhipScore > 20 ? 'medium' : 'low');
         html += '<tr>' +
           '<td>' + escapeHtml(rd.role) + '</td>' +
           '<td>' + escapeHtml(rd.name) + '</td>' +
           '<td>¥' + Math.round(rd.finalCost) + '</td>' +
           '<td>' + Math.round(rd.finalInventory) + '</td>' +
           '<td>' + Math.round(rd.finalBacklog) + '</td>' +
-          '<td>' + rd.mean.toFixed(1) + '</td>' +
-          '<td>±' + rd.stdDev.toFixed(1) + '</td>' +
-          '<td><span class="bullwhip-indicator bullwhip-' + bClass + '">' + rd.bullwhipScore + '%</span></td>' +
+          '<td>' + (rd.mean === null ? '—' : rd.mean.toFixed(1)) + '</td>' +
+          '<td>' + (rd.stdDev === null ? '—' : rd.stdDev.toFixed(2) + ' 箱') + '<br>' + (rd.cv === null ? '—' : (rd.cv * 100).toFixed(1) + '%') + '</td>' +
+          '<td>' + BeerMetrics.badge(rd.metric) + '</td><td>' + BeerMetrics.badge(rd.customerMetric) + '</td>' +
         '</tr>';
       }
 
@@ -474,7 +440,7 @@
       weeklyDetailWeeks = Math.min(maxWeeks, weeklyDetailWeeks);
       var weeklyDetailHtml = '';
       if (weeklyDetailWeeks > 0) {
-        weeklyDetailHtml += '<div style="margin-top:14px;font-size:11px;color:#888;">玩家每周成本与牛鞭分：</div>' +
+        weeklyDetailHtml += '<div style="margin-top:14px;font-size:11px;color:#888;">玩家每周成本与截至该周的累计放大倍数：</div>' +
           '<div class="weekly-detail-wrap"><table class="weekly-detail-table">' +
             '<thead><tr><th class="player-col">玩家</th><th class="role-col">角色</th>';
         for (var wh = 0; wh < weeklyDetailWeeks; wh++) {
@@ -491,8 +457,8 @@
             if (weekCost === undefined && weekBullwhip === undefined) {
               weeklyDetailHtml += '-';
             } else {
-              weeklyDetailHtml += '<span class="weekly-cell-cost">成本 ¥' + Math.round(Number(weekCost) || 0) + '</span>' +
-                '<span class="weekly-cell-bullwhip">牛鞭 ' + Math.round(Number(weekBullwhip) || 0) + '%</span>';
+              weeklyDetailHtml += '<span class="weekly-cell-cost">成本 ' + (Number.isFinite(weekCost) ? '¥' + Math.round(weekCost) : '—') + '</span>' +
+                '<span class="weekly-cell-bullwhip">' + (weekBullwhip ? BeerMetrics.text(weekBullwhip) : '—') + '</span>';
             }
             weeklyDetailHtml += '</td>';
           }
@@ -501,8 +467,19 @@
         weeklyDetailHtml += '</tbody></table></div>';
       }
 
-      html += '</tbody></table>' +
-        weeklyDetailHtml +
+      var roleCharts = bullwhipData.map(function(rd) {
+        var title = rd.role + ' · ' + rd.name;
+        var comparison = rd.metric.orders ? historyChart(title + '：收到需求与发出订单', [
+          { name: '收到需求', values: rd.demandHistory.slice(0, maxWeeks), color: '#2563eb', dashed: true },
+          { name: '发出订单', values: rd.orderHistory, color: '#c2410c' }
+        ], '箱') : '<p class="bw-detail">' + escapeHtml(title) + '：数据不完整，无法绘制完整需求对照。</p>';
+        return comparison + historyChart(title + '：截至第 N 周的累计放大倍数', [
+          { name: '本环节方差放大倍数', values: rd.weeklyBullwhip.map(function(m) { return m.ratio; }), color: '#7e22ce' }
+        ], '×');
+      }).join('');
+      html += '</tbody></table></div>' +
+        '<p class="bw-detail">相对客户需求：本角色订货方差 ÷ 同期客户需求方差，用于观察整条供应链的放大情况；与本环节倍数分列，不相乘。缺失和恒定需求期间的倍数在趋势图中留空。</p>' +
+        roleCharts + weeklyDetailHtml +
         '<div style="margin-top:10px;font-size:11px;color:#888;">团队每周下单总量：</div>' +
         '<div class="mini-chart">' + barsHtml + '</div>' +
         '<div style="margin-top:12px;font-size:11px;color:#888;">累计总成本趋势：</div>' +
@@ -511,28 +488,15 @@
     }
     document.getElementById('groupsContainer').innerHTML = html;
 
-    // Global bullwhip stats
-    if (allBullwhipScores.length > 0) {
-      var avgBw = allBullwhipScores.reduce(function(a, b) { return a + b; }, 0) / allBullwhipScores.length;
-      var severeCount = allBullwhipScores.filter(function(s) { return s > 50; }).length;
-      var maxBw = Math.max.apply(null, allBullwhipScores);
-      document.getElementById('avgBullwhip').textContent = Math.round(avgBw) + '%';
-      document.getElementById('severeBullwhip').textContent = severeCount + ' / ' + allBullwhipScores.length;
-      document.getElementById('maxBullwhipScore').textContent = Math.round(maxBw) + '%';
-    }
+    // Only finite role ratios contribute; missing/constant-demand states are never zeros.
+    var severeCount = allBullwhipScores.filter(function(value) { return value > 4; }).length;
+    document.getElementById('avgBullwhip').textContent = allBullwhipScores.length + ' / ' + gameGroup.length;
+    document.getElementById('severeBullwhip').textContent = severeCount + ' / ' + allBullwhipScores.length;
+    document.getElementById('maxBullwhipScore').textContent = allBullwhipScores.length
+      ? BeerMetrics.formatRatio(Math.max.apply(null, allBullwhipScores)) : '—';
 
-    // Key insight
-    var best = allCosts[0];
-    var worst = allCosts[allCosts.length - 1];
-    var ratio = best > 0 ? worst / best : (worst > 0 ? Infinity : 1);
-    var insight = '';
-    if (ratio > 5) {
-      insight = '各团队成本差距非常大（' + Math.round(ratio) + '倍），说明供应链协调能力差异显著。冠军团队的成本控制策略值得深入分析。';
-    } else if (ratio > 2) {
-      insight = '优秀团队的成本不到最差团队的1/' + Math.round(ratio) + '。牛鞭效应对各团队的影响差异明显。';
-    } else {
-      insight = '所有团队都面临类似的挑战。牛鞭效应是系统性问题，需要从供应链整体协调的角度来解决。';
-    }
+    // Cost differences alone do not establish a bullwhip cause.
+    var insight = '请结合各角色的方差放大倍数、需求与订货曲线、库存、积压和成本分析经营表现。恒定需求和数据缺失的角色不计入数值汇总，具体状态见小组明细。';
     document.getElementById('insightText').textContent = insight;
   }
 

@@ -183,6 +183,8 @@ function placeUser(
       backlogHistory: [],
       costHistory: [],
       orderHistory: [],
+      demandHistory: [],
+      historyStartWeek: Math.max(1, g.week),
     };
     g.users[slotIndex] = newUser;
   }

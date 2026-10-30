@@ -26,6 +26,10 @@ export interface GameUser {
   backlogHistory: number[];
   costHistory: number[];
   orderHistory: number[];
+  /** New downstream demand received at each settlement, excluding backlog. */
+  demandHistory?: number[];
+  /** First game week represented by both histories; absent for legacy data. */
+  historyStartWeek?: number;
   agent?: AgentConfig;
 }
 

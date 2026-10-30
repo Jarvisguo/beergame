@@ -52,7 +52,7 @@ interface RefUser {
   name: string; cost: number; inventory: number; backlog: number;
   role: ReturnType<typeof refMakeRole>;
   inventoryHistory: number[]; backlogHistory: number[];
-  costHistory: number[]; orderHistory: number[];
+  costHistory: number[]; orderHistory: number[]; demandHistory: number[];
 }
 
 interface RefGroup {
@@ -89,6 +89,7 @@ function refAdvanceTurn(g: RefGroup): void {
 
     // Record order (already set by caller)
     u.orderHistory.push(u.role.upstream.orders);
+    u.demandHistory.push(u.role.downstream.orders);
 
     // Send order upstream
     if (i === 3) g.shipping[i].push(u.role.upstream.orders);
@@ -105,7 +106,7 @@ function refAdvanceTurn(g: RefGroup): void {
 function createRefGroup(players: string[], trend: string): RefGroup {
   const users: RefUser[] = players.map((name, i) => ({
     name, cost: 0, inventory: STARTING_INVENTORY, backlog: 0,
-    role: refMakeRole(i), inventoryHistory: [], backlogHistory: [], costHistory: [], orderHistory: [],
+    role: refMakeRole(i), inventoryHistory: [], backlogHistory: [], costHistory: [], orderHistory: [], demandHistory: [],
   }));
   // Pre-init shipping/mailing buffers (mirrors server start game)
   const shipping: number[][] = [];
@@ -197,6 +198,8 @@ function assertUserState(actual: any, expected: RefUser, label: string) {
   assertEq(actual.backlog, expected.backlog, `${label} backlog`);
   assertEq(actual.cost, expected.cost, `${label} cost`);
   assertDeep(actual.orderHistory, expected.orderHistory, `${label} orderHistory`);
+  assertDeep(actual.demandHistory, expected.demandHistory, `${label} received demand history`);
+  assertEq(actual.historyStartWeek, 1, `${label} history starts at first game week`);
   assertDeep(actual.inventoryHistory, expected.inventoryHistory, `${label} inventoryHistory`);
   assertDeep(actual.backlogHistory, expected.backlogHistory, `${label} backlogHistory`);
   assertDeep(actual.costHistory, expected.costHistory, `${label} costHistory`);
@@ -354,6 +357,10 @@ async function testFullGame(rounds: number, trend: string, orders: number[][]) {
         const label = `round ${round + 1} ${ROLE_NAMES[i]}`;
         assertUserState(turns[i].update, ref.users[i], label);
         assertEq(turns[i].week, ref.week, `${label} week`);
+        assertEq(turns[i].analytics.length, 4, `${label} current group analytics`);
+        for (let role = 0; role < 4; role++) {
+          assertDeep(turns[i].analytics[role].demandHistory, ref.users[role].demandHistory, `${label} teammate demand history`);
+        }
       }
 
       // Verify group cost

@@ -26,6 +26,7 @@ function page(createSocket) {
     setTimeout(fn, delay) { const id = ++timerID; timers.set(id, { at: clock + delay, fn }); return id; },
     clearTimeout: id => timers.delete(id),
   });
+  runInContext(readFileSync('public/bullwhip.js', 'utf8'), context);
   runInContext(readFileSync('public/game.js', 'utf8'), context);
   const response = (groupNumber = 2) => ({ idx: 1, groupNumber, numUsers: 8, gameEnded: false,
     group: { week: 3, waitingForOrders: ['零售商', '区域仓库', '工厂'], users: [
@@ -164,10 +165,13 @@ test('real frontend/server restore group, seat and orders within grace; expiry s
     for (const i of [4, 6, 7]) await emit(players[i], 'submit order', '6');
     const nextWeekSocket = await connect(); const nextWeek = await emit(nextWeekSocket, 'submit username', 'seat-5');
     assert.equal(nextWeek.groupNumber, 2); assert.equal(nextWeek.idx, 1); assert.equal(nextWeek.group.week, 3);
+    assert.deepEqual(nextWeek.group.users[1].demandHistory, [4, 5]);
+    assert.equal(nextWeek.group.users[1].historyStartWeek, 1);
     assert.deepEqual(nextWeek.group.users[1].orderHistory, [5, 8]); assert.ok(nextWeek.group.waitingForOrders.includes('批发商'));
     nextWeekSocket.disconnect(); await pause(1400);
     const replacement = await connect(); const replaced = await emit(replacement, 'submit username', 'after-expiry');
     assert.equal(replaced.groupNumber, 2); assert.equal(replaced.idx, 1); assert.equal(replaced.reconnected, false);
+    assert.deepEqual(replaced.group.users[1].demandHistory, nextWeek.group.users[1].demandHistory);
   } finally {
     sockets.forEach(s => s.close());
     if (child.exitCode === null && child.signalCode === null) { const exited = once(child, 'exit'); child.kill(); await exited; }

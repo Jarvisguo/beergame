@@ -21,6 +21,7 @@ function playerPage() {
     localStorage: { getItem() { return null; }, setItem() {}, removeItem() {} },
     setTimeout() {}, clearTimeout() {}, console,
   });
+  runInContext(readFileSync('public/bullwhip.js', 'utf8'), context);
   runInContext(readFileSync('public/game.js', 'utf8'), context);
   const user = { name: 'player', socketId: 'test', role: { name: '零售商',
     upstream: { name: '批发商', shipments: 4 }, downstream: { name: '客户', orders: 4 } },

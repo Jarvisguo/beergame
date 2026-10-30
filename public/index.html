@@ -6,6 +6,7 @@
   <meta name="theme-color" content="#1a365d">
   <title>啤酒分销游戏</title>
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="bullwhip.css">
 </head>
 <body>
 
@@ -162,8 +163,8 @@
         <div class="alabel">订单历史</div>
         <div class="bar-chart" id="orderHist"></div>
       </div>
-      <div class="analytics-card">
-        <div class="alabel">牛鞭效应 <button class="btn-info-sm" id="btnBullwhipInfo" title="计算方法">?</button></div>
+      <div class="analytics-card bullwhip-card">
+        <div class="alabel">牛鞭效应 · 方差放大倍数 <button class="btn-info-sm" id="btnBullwhipInfo" title="计算方法">?</button></div>
         <div class="avalue" id="bullwhip">—</div>
       </div>
       <div class="analytics-card">
@@ -198,15 +199,19 @@
   <div class="modal-box">
     <div class="modal-header"><h3>牛鞭效应计算方法</h3></div>
     <div class="modal-body" style="font-size:14px;line-height:1.8;">
-      <p><strong>变异系数 (CV)</strong> = 标准差 / 平均值</p>
-      <p style="margin-top:8px;">CV 衡量订单的波动程度：</p>
+      <p><strong>B = 订货量方差 ÷ 收到的需求量方差</strong>。例如订货标准差是需求的 2 倍，方差放大倍数为 4 倍；不代表订货数量增加 4 倍。</p>
+      <p style="margin-top:8px;">累计统计已结算周，满 5 周后分档。以下是本游戏课堂展示规则：</p>
       <ul style="padding-left:20px;margin-top:4px;">
-        <li><span class="tag tag-green">CV &lt; 10%</span> — 稳定：订单量稳定，牛鞭效应轻微</li>
-        <li><span class="tag tag-yellow">CV 10%–30%</span> — 波动：订单出现一定波动</li>
-        <li><span class="tag tag-red">CV &ge; 30%</span> — 剧烈：订单大幅波动，牛鞭效应严重</li>
+        <li><span class="bw-badge bw-0">0 ≤ B ≤ 1：未放大</span></li>
+        <li><span class="bw-badge bw-1">1 &lt; B ≤ 2：轻度放大</span></li>
+        <li><span class="bw-badge bw-2">2 &lt; B ≤ 4：中度放大</span></li>
+        <li><span class="bw-badge bw-3">4 &lt; B ≤ 8：高度放大</span></li>
+        <li><span class="bw-badge bw-4">B &gt; 8：极高放大</span></li>
       </ul>
       <p style="margin-top:12px;"><strong>牛鞭效应</strong>是供应链中需求信息扭曲放大的现象——下游需求的微小变化在向上游传递时被逐级放大，导致上游供应商面临越来越大的订单波动。</p>
-      <p style="margin-top:8px;">降低牛鞭效应的策略：信息共享、减少订货批量、稳定价格、避免恐慌性订货。</p>
+      <p style="margin-top:8px;">需求是当周实际收到的新增订单，已考虑 1 周订单提前期，不含历史积压。零售商以客户需求为基准。</p>
+      <p style="margin-top:8px;">需求恒定时无法计算倍数，会单独说明订单是否波动；旧数据缺少需求历史时显示“数据不完整”。CV = 订货标准差 ÷ 订货均值，仅用于辅助观察订货相对波动。</p>
+      <p style="margin-top:8px;">“未放大”不等于经营优秀，请结合成本、库存和积压判断。通过稳定订货、结合在途量决策，避免恐慌性订货。</p>
     </div>
     <div class="modal-footer">
       <button class="btn btn-primary btn-block" id="btnBullwhipClose">知道了</button>
@@ -215,6 +220,7 @@
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
+<script src="bullwhip.js"></script>
 <script src="game.js?v=3"></script>
 </body>
 </html>

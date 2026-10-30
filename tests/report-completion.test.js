@@ -13,6 +13,7 @@ function report(groups) {
   const context = createContext({ document: { getElementById: id => elements.get(id) },
     window: { addEventListener: (e, h) => events.set(e, h) },
     localStorage: { getItem: () => stored }, setTimeout() {}, console });
+  runInContext(readFileSync('public/bullwhip.js', 'utf8'), context);
   runInContext(script, context);
   const render = () => runInContext('generateReport()', context);
   render();
@@ -23,6 +24,7 @@ function report(groups) {
 }
 function group(week, cost, name, orders = Array(26).fill(4)) {
   return { week, cost, costHistory: [cost], users: [{ name, cost, inventory: 12, backlog: 0,
+    historyStartWeek: 1, demandHistory: Array.from({ length: 26 }, (_, i) => i % 2 ? 6 : 4),
     role: { name: '零售商', downstream: { name: '客户' } }, orderHistory: orders,
     inventoryHistory: [12], backlogHistory: [0], costHistory: [cost] }] };
 }
@@ -37,9 +39,9 @@ test('only completed teams contribute to every report section, retaining origina
   assert.equal(p.get('bestCost').textContent, '¥100');
   assert.equal(p.get('avgCost').textContent, '¥200');
   assert.equal(p.get('worstCost').textContent, '¥300');
-  assert.equal(p.get('avgBullwhip').textContent, '0%');
+  assert.equal(p.get('avgBullwhip').textContent, '2 / 2');
   assert.equal(p.get('severeBullwhip').textContent, '0 / 2');
-  assert.equal(p.get('maxBullwhipScore').textContent, '0%');
+  assert.equal(p.get('maxBullwhipScore').textContent, '0.00×');
   assert.equal(p.get('weekSummary').textContent, '#2: 已完成 26 轮；#4: 已完成 26 轮');
   assert.match(p.get('groupsContainer').innerHTML, /团队 #4 — 第 1 名/);
   assert.match(p.get('groupsContainer').innerHTML, /团队 #2 — 第 2 名/);
@@ -84,6 +86,7 @@ test('ending the game keeps server group numbers through the admin cache and fin
   const admin = createContext({ document: { querySelector: get, createElement: element }, window: {},
     localStorage: { setItem: (k, v) => storage.set(k, v) }, io: () => ({ on() {}, emit() {} }),
     setTimeout() {}, clearTimeout() {}, console, groups });
+  runInContext(readFileSync('public/bullwhip.js', 'utf8'), admin);
   runInContext(readFileSync('public/admin.js', 'utf8'), admin);
   runInContext('gameGroup = groups; rankGroups()', admin);
   const cached = JSON.parse(storage.get('beerGameGroup'));
@@ -96,4 +99,55 @@ test('ending the game keeps server group numbers through the admin cache and fin
   const rankingRows = get('#adminTbody').children.map(row => row.innerHTML);
   assert.match(rankingRows[0], /1（团队 #2）/, 'admin ranking remains sorted without changing identity');
   assert.match(rankingRows[1], /2（团队 #3）/);
+});
+
+
+test('report uses retailer demand, uncapped ratios, cumulative trends and legacy-safe states', () => {
+  const demand = Array.from({ length: 26 }, (_, i) => i % 2 ? 8 : 4);
+  const g = group(27, 100, 'retailer-variance', demand.map(v => v * 10));
+  g.users[0].demandHistory = demand;
+  const p = report([g]);
+  assert.equal(p.get('maxBullwhipScore').textContent, '100.00×');
+  assert.equal(p.get('severeBullwhip').textContent, '1 / 1');
+  assert.match(p.text(), /极高放大/);
+  assert.match(p.text(), /收到需求与发出订单/);
+  assert.match(p.text(), /截至第 N 周的累计放大倍数/);
+  assert.match(p.text(), /相对客户需求/);
+  assert.doesNotMatch(p.text(), /牛鞭分|牛鞭 100%/);
+  delete g.users[0].demandHistory;
+  p.update([g]);
+  assert.equal(p.get('maxBullwhipScore').textContent, '—');
+  assert.equal(p.get('avgBullwhip').textContent, '0 / 1');
+  assert.equal(p.get('severeBullwhip').textContent, '0 / 0');
+  assert.match(p.text(), /数据不完整/);
+  assert.equal(p.get('bestCost').textContent, '¥100');
+});
+
+test('constant-demand warnings remain visible without numeric group maxima', () => {
+  const g = group(27, 20, 'constant-demand-player', Array.from({ length: 26 }, (_, i) => i % 2 ? 20 : 0));
+  g.users[0].demandHistory = Array(26).fill(4);
+  const p = report([g]);
+  assert.match(p.text(), /恒定需求下出现订单波动/);
+  assert.equal(p.get('maxBullwhipScore').textContent, '—');
+  assert.equal(p.get('severeBullwhip').textContent, '0 / 0');
+});
+
+test('missing weekly costs stay unknown; replacement histories are aligned to their game week', () => {
+  const g = group(27, 12, 'replacement-at-25', [7, 9]);
+  Object.assign(g.users[0], { historyStartWeek: 25, demandHistory: [4, 6], costHistory: [0, 5], cost: 12 });
+  const p = report([g]);
+  const costs = [...p.text().matchAll(/class="weekly-cell-cost">([^<]+)/g)].map(m => m[1]);
+  assert.deepEqual(costs.slice(0, 24), Array(24).fill('成本 —'));
+  assert.deepEqual(costs.slice(24), ['成本 ¥5', '成本 ¥7']);
+  assert.doesNotMatch(p.text(), /W1: 7|成本 ¥0/);
+});
+
+test('weekly costs account for the last settlement without adding a fictitious zero week', () => {
+  const g = group(27, 52, 'twenty-six-weeks');
+  g.users[0].costHistory = Array.from({ length: 26 }, (_, i) => i * 2);
+  g.users[0].cost = 52;
+  const p = report([g]);
+  const costs = [...p.text().matchAll(/class="weekly-cell-cost">成本 ¥(\d+)/g)].map(m => Number(m[1]));
+  assert.deepEqual(costs, Array(26).fill(2));
+  assert.equal(costs.reduce((sum, value) => sum + value, 0), 52);
 });
