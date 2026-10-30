@@ -24,6 +24,15 @@ let agentTarget = null; // { groupIndex, roleIndex }
 window.gameGroup = gameGroup;
 
 // ── Helpers ───────────────────────────────────────────────────────────
+function escapeHtml(value) {
+  return String(value == null ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function formatWeek(g) {
   const w = g.week || 0;
   const completed = Math.max(0, Math.min(w - 1, MAX_WEEKS));
@@ -87,7 +96,7 @@ function refreshTable(groups, gameStarted) {
         const removeBtn = adminGameStarted && !adminGameEnded
           ? ` <button class="btn btn-sm btn-outline btnMemberRemove" data-group="${i}" data-role="${j}">移出</button>`
           : '';
-        html += `<td>${u.name}${badge}${assignBtn}${removeBtn}</td>`;
+        html += `<td>${escapeHtml(u.name)}${badge}${assignBtn}${removeBtn}</td>`;
       } else {
         if (adminGameStarted && !adminGameEnded) {
           html += `<td><button class="btn btn-sm btn-outline btnAgentAssign" data-group="${i}" data-role="${j}">+AI</button></td>`;
@@ -130,6 +139,18 @@ function refreshTable(groups, gameStarted) {
 }
 
 // ── Socket Events ─────────────────────────────────────────────────────
+function requireAdminLogin() {
+  $('#adminLogin').hidden = false;
+  $('#groupPanel').hidden = true;
+  $('#agentModal').hidden = true;
+  $('#passwordInput').value = '';
+  $('#wrongPass').hidden = true;
+  agentTarget = null;
+}
+
+socket.on('connect', requireAdminLogin);
+socket.on('disconnect', requireAdminLogin);
+
 socket.on('update table', (msg) => {
   gameGroup = msg.groups;
   window.gameGroup = gameGroup;
@@ -149,6 +170,7 @@ $('#btnAdmin').addEventListener('click', () => {
     if (msg === 'Invalid Password') {
       $('#wrongPass').hidden = false;
     } else {
+      $('#passwordInput').value = '';
       $('#adminLogin').hidden = true;
       gameGroup = msg.groups;
       window.gameGroup = gameGroup;
@@ -165,6 +187,11 @@ $('#btnAdmin').addEventListener('click', () => {
       } else {
         adminGameStarted = false;
         adminGameEnded = false;
+        $('#gameSettings').hidden = false;
+        $('#btnStartGame').disabled = false;
+        $('#btnEndGame').hidden = true;
+        $('#btnResetGame').hidden = true;
+        $('#groupRank').textContent = '团队 #';
         refreshTable(gameGroup, false);
       }
     }

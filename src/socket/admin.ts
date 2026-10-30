@@ -51,6 +51,16 @@ function initGroup(io: Server, groupIndex: number): void {
 }
 
 export function registerAdminHandlers(io: Server, socket: Socket): void {
+  // Authorization belongs to this connection; reconnecting sockets must log in again.
+  function onAdmin(event: string, handler: (...args: any[]) => void): void {
+    socket.on(event, (...args: any[]) => {
+      if (!socket.rooms.has('admins')) {
+        return ack(args[args.length - 1], { err: '需要管理员登录。' });
+      }
+      handler(...args);
+    });
+  }
+
   socket.on('submit password', (password: string, callback?: Function) => {
     if (password !== ADMIN_PASSWORD) {
       return ack(callback, 'Invalid Password');
@@ -71,7 +81,7 @@ export function registerAdminHandlers(io: Server, socket: Socket): void {
     });
   });
 
-  socket.on('start game', (options: { demandTrend?: string } | Function, callback?: Function) => {
+  onAdmin('start game', (options: { demandTrend?: string } | Function, callback?: Function) => {
     if (typeof options === 'function') {
       callback = options;
       options = {};
@@ -113,7 +123,7 @@ export function registerAdminHandlers(io: Server, socket: Socket): void {
     });
   });
 
-  socket.on('end game', (callback?: Function) => {
+  onAdmin('end game', (callback?: Function) => {
     if (!state.gameStarted || state.gameEnded) {
       return ack(callback, 'Error');
     }
@@ -122,7 +132,7 @@ export function registerAdminHandlers(io: Server, socket: Socket): void {
     socket.broadcast.emit('game ended', { numUsers: state.numUsers });
   });
 
-  socket.on('reset game', (callback?: Function) => {
+  onAdmin('reset game', (callback?: Function) => {
     if (!state.gameStarted) {
       return ack(callback, 'Error');
     }
@@ -138,7 +148,7 @@ export function registerAdminHandlers(io: Server, socket: Socket): void {
     io.emit('game reset');
   });
 
-  socket.on('remove group', (msg: string, callback?: Function) => {
+  onAdmin('remove group', (msg: string, callback?: Function) => {
     const idx = Number(msg);
     if (msg === '' || isNaN(idx) || idx < 0 || idx >= state.groups.length) {
       return ack(callback, 'Error');
@@ -181,7 +191,7 @@ export function registerAdminHandlers(io: Server, socket: Socket): void {
     });
   });
 
-  socket.on('remove member', (msg: {
+  onAdmin('remove member', (msg: {
     groupIndex: number;
     roleIndex: number;
     reason?: string;
@@ -240,7 +250,7 @@ export function registerAdminHandlers(io: Server, socket: Socket): void {
     ack(callback, { ok: true, numUsers: state.numUsers, groups: state.groups });
   });
 
-  socket.on('add agent', (msg: {
+  onAdmin('add agent', (msg: {
     groupIndex: number;
     roleIndex: number;
     strategy?: string;
@@ -310,7 +320,7 @@ export function registerAdminHandlers(io: Server, socket: Socket): void {
     ack(callback, { ok: true });
   });
 
-  socket.on('remove agent', (msg: { groupIndex: number; roleIndex: number }, callback?: Function) => {
+  onAdmin('remove agent', (msg: { groupIndex: number; roleIndex: number }, callback?: Function) => {
     const { groupIndex, roleIndex } = msg;
     const g = state.groups[groupIndex];
 
@@ -328,7 +338,7 @@ export function registerAdminHandlers(io: Server, socket: Socket): void {
     ack(callback, { ok: true });
   });
 
-  socket.on('list agents', (callback?: Function) => {
+  onAdmin('list agents', (callback?: Function) => {
     const agents: Array<{ groupIndex: number; roleIndex: number; name: string; strategy: string }> = [];
     for (let gi = 0; gi < state.groups.length; gi++) {
       for (let ri = 0; ri < state.groups[gi].users.length; ri++) {

@@ -236,6 +236,15 @@ function setFlowState(state, data = {}) {
 }
 
 // ── Group table ───────────────────────────────────────────────────────
+function escapeHtml(value) {
+  return String(value == null ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function updateGroupTable() {
   if (!curGroup) return;
   const rows = $('#groupTbody').querySelectorAll('tr');
@@ -247,13 +256,13 @@ function updateGroupTable() {
       ? `<span class="tag ${bw.cls}">${bw.label} (${(bw.cv * 100).toFixed(0)}%)</span>`
       : '<span class="tag tag-gray">—</span>';
     if (i === userIdx) {
-      tr.innerHTML = `<td>${i + 1}</td><td>${u.name}</td><td>${u.role.name}</td><td>${bwCell}</td>`;
+      tr.innerHTML = `<td>${i + 1}</td><td>${escapeHtml(u.name)}</td><td>${u.role.name}</td><td>${bwCell}</td>`;
       tr.className = 'active';
     } else if (u.socketId) {
-      tr.innerHTML = `<td>${i + 1}</td><td>${curWeek > 0 ? u.name : '玩家 ' + (i + 1)}</td><td>${u.role.name}</td><td>${bwCell}</td>`;
+      tr.innerHTML = `<td>${i + 1}</td><td>${escapeHtml(curWeek > 0 ? u.name : '玩家 ' + (i + 1))}</td><td>${u.role.name}</td><td>${bwCell}</td>`;
       tr.className = '';
     } else {
-      tr.innerHTML = `<td>${i + 1}</td><td>${u.name ? u.name : '玩家 ' + (i + 1)}（已断开）</td><td>${u.role.name || ''}</td><td>${bwCell}</td>`;
+      tr.innerHTML = `<td>${i + 1}</td><td>${escapeHtml(u.name || '玩家 ' + (i + 1))}（已断开）</td><td>${u.role.name || ''}</td><td>${bwCell}</td>`;
       tr.className = 'warn';
     }
   });

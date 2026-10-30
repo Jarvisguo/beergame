@@ -441,8 +441,8 @@
         var rd = bullwhipData[u];
         var bClass = rd.bullwhipScore > 50 ? 'high' : (rd.bullwhipScore > 20 ? 'medium' : 'low');
         html += '<tr>' +
-          '<td>' + rd.role + '</td>' +
-          '<td>' + rd.name + '</td>' +
+          '<td>' + escapeHtml(rd.role) + '</td>' +
+          '<td>' + escapeHtml(rd.name) + '</td>' +
           '<td>¥' + Math.round(rd.finalCost) + '</td>' +
           '<td>' + Math.round(rd.finalInventory) + '</td>' +
           '<td>' + Math.round(rd.finalBacklog) + '</td>' +
