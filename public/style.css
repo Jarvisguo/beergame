@@ -64,8 +64,9 @@ table { border-collapse: collapse; width: 100%; }
 /* ── App Header ─────────────────────────────────────────────────────── */
 .app-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-sm); margin-bottom: var(--space-md); }
 .app-header h1 { font-size: var(--font-lg); font-weight: 700; color: var(--clr-primary-dark); }
-.user-bar { font-size: 13px; color: var(--clr-muted); }
+.user-bar { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-xs); font-size: 13px; color: var(--clr-muted); }
 .user-bar .sep { margin: 0 6px; color: var(--clr-border); }
+.group-badge { padding: 2px 8px; border-radius: var(--radius-sm); background: var(--clr-primary-dark); color: #fff; font-weight: 600; white-space: nowrap; }
 .toolbar { display: flex; gap: var(--space-sm); flex-wrap: wrap; }
 
 /* ── Badge ──────────────────────────────────────────────────────────── */
@@ -203,6 +204,7 @@ table { border-collapse: collapse; width: 100%; }
 .btn-act { background: var(--clr-warning); color: #fff; flex-shrink: 0; }
 .btn-act:active { background: #b45309; }
 .btn.disabled { pointer-events: none; opacity: 0.5; }
+#btnReconnect[hidden] { display: none; }
 
 /* ── Forms ──────────────────────────────────────────────────────────── */
 .input {

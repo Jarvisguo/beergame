@@ -69,14 +69,17 @@ function updateAdminStatus() {
 }
 
 // ── Table ─────────────────────────────────────────────────────────────
-function refreshTable(groups, gameStarted) {
+function refreshTable(groups, gameStarted, displayOrder = null) {
   const tbody = $('#adminTbody');
   tbody.innerHTML = '';
 
-  groups.forEach((g, i) => {
+  const indices = displayOrder || groups.map((_, i) => i);
+  indices.forEach((i, rank) => {
+    const g = groups[i];
     const tr = document.createElement('tr');
     const w = gameStarted ? ` (${formatWeek(g)}，¥${(g.cost || 0).toFixed(0)})` : '';
-    let html = `<td>${i + 1}${w}</td>`;
+    const label = displayOrder ? `${rank + 1}（团队 #${i + 1}）` : i + 1;
+    let html = `<td>${label}${w}</td>`;
 
     let totalInv = 0, totalBack = 0;
     for (let j = 0; j < 4; j++) {
@@ -296,13 +299,15 @@ function rankGroups() {
   let lowestWeek = Infinity;
   gameGroup.forEach(g => { if (g.week < lowestWeek) lowestWeek = g.week; });
 
-  gameGroup.sort((a, b) => {
-    const ca = a.costHistory[lowestWeek - 1] || 0;
-    const cb = b.costHistory[lowestWeek - 1] || 0;
+  // Sort only the presentation: array positions are the server's group identities
+  // and must stay unchanged in gameGroup and the report's localStorage cache.
+  const displayOrder = gameGroup.map((_, i) => i).sort((a, b) => {
+    const ca = gameGroup[a].costHistory[lowestWeek - 1] || 0;
+    const cb = gameGroup[b].costHistory[lowestWeek - 1] || 0;
     return ca - cb;
   });
 
-  refreshTable(gameGroup, true);
+  refreshTable(gameGroup, true, displayOrder);
 }
 
 // ── AI Agent Management ────────────────────────────────────────────────

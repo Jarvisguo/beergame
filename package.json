@@ -5,7 +5,7 @@
   "main": "src/server.ts",
   "scripts": {
     "start": "npx tsx src/server.ts",
-    "test": "tsx --test tests/admin-auth.test.ts tests/frontend-security.test.js && tsx tests/full-game.test.ts",
+    "test": "tsx --test tests/admin-auth.test.ts tests/frontend-security.test.js tests/player-group.test.js tests/player-reconnect.test.js tests/report-completion.test.js && tsx tests/full-game.test.ts",
     "dev": "npx tsx watch src/server.ts"
   },
   "engines": {

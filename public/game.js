@@ -27,13 +27,19 @@ let gameEnded = false;
 let myRoleName = '';
 let submittedOrder = false;
 let activeUsername = localStorage.getItem('bdg_username') || '';
-let restoreInFlight = false;
+let loginRequest = null;
+let loginRetryTimer = null;
+let sessionReady = false;
+let sessionVersion = 0;
+const LOGIN_TIMEOUT_MS = 8000;
+// Give an old, half-open connection time to expire, with a finite retry budget.
+const LOGIN_RETRY_DELAYS = [1000, 3000, 10000, 30000, 45000];
 
 // ── Connection ────────────────────────────────────────────────────────
 function setConn(state) {
   const bar = $('#connBar');
-  bar.className = `conn-bar conn-${state}`;
-  const map = { online: '🟢 在线', reconnecting: '🟡 重连中...', offline: '🔴 已断开' };
+  bar.className = `conn-bar conn-${state === 'restoring' ? 'reconnecting' : state}`;
+  const map = { online: '🟢 在线', reconnecting: '🟡 重连中...', restoring: '🟡 正在恢复游戏...', offline: '🔴 连接未恢复，请重试' };
   bar.textContent = map[state] || state;
 }
 
@@ -45,21 +51,26 @@ function showToast(msg, dur = 2500) {
 }
 
 socket.on('connect', () => {
-  setConn('online');
-  restoreSessionAfterReconnect();
-});
-socket.on('reconnect', () => {
-  setConn('online');
+  cancelLoginRequest();
+  if (!activeUsername && !localStorage.getItem('bdg_username')) setConn('online');
   restoreSessionAfterReconnect(true);
 });
-socket.on('reconnecting', () => setConn('reconnecting'));
-socket.on('disconnect', () => setConn('offline'));
-socket.on('reconnect_failed', () => setConn('offline'));
+socket.on('disconnect', () => {
+  cancelLoginRequest();
+  sessionReady = false;
+  sessionVersion++;
+  $('#btnOrder').disabled = true;
+  $('#orderInput').disabled = true;
+  $('#btnReconnect').hidden = !activeUsername;
+  setConn('offline');
+});
+socket.on('connect_error', () => setConn('offline'));
 
 // Page Visibility: detect screen-on after phone lock
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
     if (!socket.connected) {
+      setConn('reconnecting');
       socket.connect();
     } else {
       restoreSessionAfterReconnect();
@@ -127,6 +138,12 @@ function updateUpstreamShipmentDelta(user) {
 }
 
 // ── Status ────────────────────────────────────────────────────────────
+function updateGroupNumber(number) {
+  const valid = Number.isInteger(number) && number > 0;
+  $('#userGroup').textContent = valid ? `第 ${number} 组` : '';
+  $('#userGroup').hidden = !valid;
+}
+
 function updateStatus() {
   let txt;
   const count = Number.isFinite(numUsers) ? numUsers : 0;
@@ -280,6 +297,11 @@ function nextTurn(users, week, user) {
 }
 
 function resetUI() {
+  cancelLoginRequest();
+  sessionReady = false;
+  sessionVersion++;
+  localStorage.removeItem('bdg_username');
+  $('#btnReconnect').hidden = true;
   curWeek = 0; curUser = null; numUsers = 0; userIdx = 0;
   curGroup = null; gameEnded = false; submittedOrder = false; activeUsername = '';
 
@@ -289,6 +311,7 @@ function resetUI() {
   $('#board').hidden = true;
   $('#analytics').hidden = true;
   $('#weekInfo').hidden = true;
+  updateGroupNumber(null);
   $('#userRole').textContent = '';
   $('#username').textContent = '';
   $('#mainApp').hidden = true;
@@ -302,6 +325,9 @@ function resetUI() {
 }
 
 function applyLoginState(msg, options = {}) {
+  sessionReady = true;
+  setConn('online');
+  $('#btnReconnect').hidden = true;
   userIdx = msg.idx;
   curGroup = msg.group;
   curUser = msg.group.users[userIdx];
@@ -313,6 +339,7 @@ function applyLoginState(msg, options = {}) {
   $('#loginErr').hidden = true;
   $('#loginModal').hidden = true;
   $('#mainApp').hidden = false;
+  updateGroupNumber(msg.groupNumber);
   $('#userRole').textContent = '您的角色：' + curUser.role.name;
   $('#username').textContent = '已登录：' + curUser.name;
   updateBoard();
@@ -363,15 +390,62 @@ function applyLoginState(msg, options = {}) {
   }
 }
 
+function cancelLoginRequest() {
+  if (loginRequest) clearTimeout(loginRequest.timer);
+  loginRequest = null;
+  clearTimeout(loginRetryTimer);
+  loginRetryTimer = null;
+  $('#btnLogin').disabled = false;
+}
+
+function requestPlayerLogin(name, showRestored = false, attempt = 0) {
+  if (loginRequest || !socket.connected) return;
+  clearTimeout(loginRetryTimer);
+  loginRetryTimer = null;
+  activeUsername = name;
+  sessionReady = false;
+  $('#btnLogin').disabled = true;
+  $('#btnReconnect').hidden = true;
+  $('#btnOrder').disabled = true;
+  $('#orderInput').disabled = true;
+  $('#loginErr').hidden = true;
+  setConn('restoring');
+  const request = { socketId: socket.id, timer: null };
+  loginRequest = request;
+
+  function finish(msg) {
+    // A timeout, reset, or reconnect invalidates replies from the old request.
+    if (loginRequest !== request || !socket.connected || socket.id !== request.socketId) return;
+    clearTimeout(request.timer);
+    loginRequest = null;
+    $('#btnLogin').disabled = false;
+    if (msg && typeof msg === 'object' && !msg.err && msg.group && msg.group.users && msg.group.users[msg.idx]) {
+      applyLoginState(msg, { showRestored });
+      return;
+    }
+    const message = !msg ? '连接恢复超时，请重试。'
+      : msg === 'Game Started' ? '原连接尚未断开或用户名正在使用，请稍候重试。'
+      : msg === 'Game Ended' ? '游戏已结束。'
+      : typeof msg === 'string' ? msg : msg.err || '恢复失败，请重试。';
+    $('#loginErr').textContent = message;
+    $('#loginErr').hidden = false;
+    $('#btnReconnect').hidden = false;
+    showToast(message, 4000);
+    setConn('offline');
+    if ((!msg || msg === 'Game Started') && attempt < LOGIN_RETRY_DELAYS.length) {
+      loginRetryTimer = setTimeout(() => {
+        loginRetryTimer = null;
+        if (socket.connected && activeUsername === name) requestPlayerLogin(name, showRestored, attempt + 1);
+      }, LOGIN_RETRY_DELAYS[attempt]);
+    }
+  }
+  request.timer = setTimeout(() => finish(null), LOGIN_TIMEOUT_MS);
+  socket.emit('submit username', name, finish);
+}
+
 function restoreSessionAfterReconnect(showRestored = false) {
   const name = activeUsername || localStorage.getItem('bdg_username') || '';
-  if (!name || restoreInFlight || !socket.connected) return;
-  restoreInFlight = true;
-  socket.emit('submit username', name, (msg) => {
-    restoreInFlight = false;
-    if (!msg || typeof msg !== 'object' || msg.err || msg === 'Game Started') return;
-    applyLoginState(msg, { silent: true, showRestored });
-  });
+  if (name) requestPlayerLogin(name, showRestored);
 }
 
 // ── Socket Events ─────────────────────────────────────────────────────
@@ -380,6 +454,7 @@ socket.on('user joined', (msg) => { numUsers = msg.numUsers; updateStatus(); });
 socket.on('user left', (msg) => { numUsers = msg.numUsers; updateStatus(); });
 
 socket.on('change group subscription', (msg) => {
+  if (Number.isInteger(msg) && msg >= 0) updateGroupNumber(msg + 1);
   socket.emit('change group', msg);
 });
 
@@ -528,33 +603,23 @@ if (cachedName) {
 
 $('#btnLogin').addEventListener('click', (e) => {
   e.preventDefault();
-  if ($('#btnLogin').classList.contains('disabled')) return;
+  if ($('#btnLogin').disabled) return;
   const name = $('#usernameInput').value.trim();
   if (!name) return;
 
-  $('#btnLogin').classList.add('disabled');
-  socket.emit('submit username', name, (msg) => {
-    $('#btnLogin').classList.remove('disabled');
-    if (msg === '游戏尚未开始，请等待管理员启动。') {
-      $('#loginErr').textContent = '游戏尚未开始，请等待管理员启动。';
-      $('#loginErr').hidden = false;
-    } else if (msg === 'Game Started') {
-      $('#loginErr').textContent = '所有小组已满员，无法加入。';
-      $('#loginErr').hidden = false;
-    } else if (msg === 'Game Ended') {
-      $('#loginErr').textContent = '游戏已结束。';
-      $('#loginErr').hidden = false;
-    } else if (msg && msg.err) {
-      $('#loginErr').hidden = false;
-    } else {
-      applyLoginState(msg);
-    }
-  });
+  activeUsername = name;
+  if (!socket.connected) { setConn('reconnecting'); socket.connect(); }
+  else requestPlayerLogin(name);
+});
+
+$('#btnReconnect').addEventListener('click', () => {
+  if (!socket.connected) { setConn('reconnecting'); socket.connect(); }
+  else restoreSessionAfterReconnect(true);
 });
 
 $('#btnOrder').addEventListener('click', (e) => {
   e.preventDefault();
-  if ($('#btnOrder').disabled) return;
+  if ($('#btnOrder').disabled || !sessionReady || !socket.connected) return;
   const val = $('#orderInput').value.trim();
   if (!/^\d+$/.test(val)) {
     showToast('请输入有效的非负整数订单数量。');
@@ -568,7 +633,10 @@ $('#btnOrder').addEventListener('click', (e) => {
   }
   $('#btnOrder').disabled = true;
   $('#orderInput').disabled = true;
+  const orderSocketId = socket.id;
+  const orderSessionVersion = sessionVersion;
   socket.emit('submit order', val, (resp) => {
+    if (!sessionReady || socket.id !== orderSocketId || sessionVersion !== orderSessionVersion) return;
     if (resp && resp.err) {
       showToast(resp.err, 3000);
       if (!submittedOrder) {

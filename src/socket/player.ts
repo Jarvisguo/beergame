@@ -15,6 +15,7 @@ import { log, groupRoom, ack } from '../utils.js';
 import { customerDemand } from '../game/demand.js';
 import { computeOrder, resolveParams } from '../agent/strategies.js';
 import type { StrategyName } from '../agent/strategies.js';
+import type { UserLookup } from '../types.js';
 
 function initGroup(io: Server, groupIndex: number): void {
   const g = state.groups[groupIndex];
@@ -96,11 +97,31 @@ export function scheduleAgentSubmissions(io: Server, groupIndex: number): void {
 export function registerPlayerHandlers(io: Server, socket: Socket): void {
   let addedUser = false;
 
+  function replyLogin(callback: Function | undefined, user: UserLookup, reconnected: boolean): void {
+    const g = state.groups[user.group];
+    ack(callback, {
+      numUsers: state.numUsers,
+      idx: user.index,
+      groupNumber: user.group + 1,
+      group: g,
+      gameEnded: state.gameEnded,
+      reconnected,
+      demandTrend: g.demandTrend,
+      demandProfile: g.demandProfile,
+    });
+  }
+
   socket.on('submit username', (userName: string, callback?: Function) => {
     if (addedUser) {
       const currentName = (socket as any).name as string | undefined;
       const currentUser = currentName ? state.users[currentName] : undefined;
-      if (currentUser && currentUser.socketId === socket.id) return;
+      if (currentUser && currentUser.socketId === socket.id) {
+        if (currentName !== userName) {
+          return ack(callback, { err: '当前连接已登录，请使用原用户名恢复。' });
+        }
+        // Repeated login returns a snapshot without assigning a seat or replaying events.
+        return replyLogin(callback, currentUser, true);
+      }
       addedUser = false;
       delete (socket as any).name;
     }
@@ -161,15 +182,7 @@ export function registerPlayerHandlers(io: Server, socket: Socket): void {
       groups: state.groups,
     });
 
-    ack(callback, {
-      numUsers: state.numUsers,
-      idx: user.index,
-      group: g,
-      gameEnded: state.gameEnded,
-      reconnected: isReconnect,
-      demandTrend: g.demandTrend,
-      demandProfile: g.demandProfile,
-    });
+    replyLogin(callback, user, isReconnect);
   });
 
   socket.on('submit order', (order: string, callback?: Function) => {

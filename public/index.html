@@ -37,6 +37,7 @@
   <div class="app-header">
     <h1>啤酒分销游戏</h1>
     <div class="user-bar">
+      <span id="userGroup" class="group-badge" role="status" aria-atomic="true" hidden></span>
       <span id="userRole"></span>
       <span class="sep">|</span>
       <span id="username"></span>
@@ -44,6 +45,7 @@
   </div>
 
   <p class="status" id="participants">等待游戏开始...</p>
+  <button class="btn btn-outline" id="btnReconnect" hidden>重新连接并恢复游戏</button>
 
   <div class="week-info" id="weekInfo" hidden>
     <span class="week-num" id="weekNum">第 0 周</span>

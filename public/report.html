@@ -88,6 +88,7 @@
 
 <div class="summary-box">
   <h3>📊 全局概览</h3>
+  <p>仅统计已完成全部 26 周的小组；未完成小组不计入汇总、排名或明细。</p>
   <div class="metrics-grid" id="globalMetrics">
     <div class="metric-item">
       <div class="metric-label">总参与人数</div>
@@ -247,10 +248,26 @@
       }
     } catch (e) {}
     
-    var gameGroup = gameGroupData || window.gameGroup;
-    
-    if (!gameGroup || !gameGroup[0]) {
-      document.getElementById('groupsContainer').innerHTML = '<p style="text-align:center;color:#888;padding:40px;">暂无游戏数据。请先开始一场游戏。</p>';
+    var sourceGroups = gameGroupData || window.gameGroup;
+    // The server increments week after settlement: week 26 is still in progress.
+    // Preserve the original number before filtering or ranking completed teams.
+    var gameGroup = (Array.isArray(sourceGroups) ? sourceGroups : []).map(function(group, index) {
+      return Object.assign({}, group, { _originalIndex: index });
+    }).filter(function(group) {
+      return Number.isInteger(group.week) && group.week > maxWeeks;
+    });
+    document.getElementById('reportDate').textContent = '生成时间：' + new Date().toLocaleString('zh-CN');
+    document.getElementById('keyInsight').hidden = gameGroup.length === 0;
+
+    if (gameGroup.length === 0) {
+      document.getElementById('totalPlayers').textContent = '0 人';
+      document.getElementById('totalGroups').textContent = '团队数量：0 组';
+      document.getElementById('groupIds').textContent = '团队编号：—';
+      document.getElementById('gameWeeks').textContent = '游戏周期：26 周';
+      ['bestTeam', 'bestCost', 'avgCost', 'worstCost', 'weekSummary', 'avgBullwhip', 'severeBullwhip', 'maxBullwhipScore', 'insightText'].forEach(function(id) {
+        document.getElementById(id).textContent = '—';
+      });
+      document.getElementById('groupsContainer').innerHTML = '<p style="text-align:center;color:#888;padding:40px;">暂无完成全部 26 周的小组，暂不生成排名及经营数据。</p>';
       return;
     }
 
@@ -270,18 +287,16 @@
     document.getElementById('totalPlayers').textContent = totalPlayers + ' 人';
     document.getElementById('gameWeeks').textContent = formatGameWeek(allWeeks);
     document.getElementById('totalGroups').textContent = '团队数量：' + gameGroup.length + ' 组';
-    document.getElementById('groupIds').textContent = '团队编号：' + gameGroup.map(function(_, i) { return '#' + (i + 1); }).join(', ');
-    document.getElementById('reportDate').textContent = '生成时间：' + new Date().toLocaleString('zh-CN');
+    document.getElementById('groupIds').textContent = '团队编号：' + gameGroup.map(function(g) { return '#' + (g._originalIndex + 1); }).join(', ');
 
     // Week summary
-    var weekSummaryText = gameGroup.map(function(g, i) { return '#' + (i + 1) + ': ' + formatGameWeek(g.week || 0); }).join('；');
+    var weekSummaryText = gameGroup.map(function(g) { return '#' + (g._originalIndex + 1) + ': ' + formatGameWeek(g.week || 0); }).join('；');
     document.getElementById('weekSummary').textContent = weekSummaryText;
 
     // Sort groups by cost (lowest first), preserving original index.
-    // Reports should render even before costs become positive.
+    // Completed teams may legitimately have zero cost.
     var sortedGroups = JSON.parse(JSON.stringify(gameGroup));
     for (var i = 0; i < sortedGroups.length; i++) {
-      sortedGroups[i]._originalIndex = i;
       sortedGroups[i].cost = Number(sortedGroups[i].cost) || 0;
       sortedGroups[i].users = Array.isArray(sortedGroups[i].users) ? sortedGroups[i].users.filter(Boolean) : [];
     }
@@ -526,19 +541,15 @@
   var maxRetries = 10;
 
   function tryGenerateReport() {
+    generateReport();
     var stored = null;
     try { stored = localStorage.getItem('beerGameGroup'); } catch(e) {}
     var parsed = null;
     try { parsed = stored ? JSON.parse(stored) : null; } catch(e) {}
 
-    if (parsed && parsed.length > 0) {
-      generateReport();
-    } else if (reportRetries < maxRetries) {
+    if ((!Array.isArray(parsed) || parsed.length === 0) && reportRetries < maxRetries) {
       reportRetries++;
       setTimeout(tryGenerateReport, 800);
-    } else {
-      document.getElementById('groupsContainer').innerHTML =
-        '<p style="text-align:center;color:#888;padding:40px;">暂无游戏数据。请先在管理端开始游戏并运营至少1周，然后<a href="javascript:location.reload()" style="color:#2c5f7a;">刷新此页面</a>。</p>';
     }
   }
 
@@ -548,13 +559,8 @@
 
   // Auto-refresh when admin.js updates localStorage in another tab
   window.addEventListener('storage', function(e) {
-    if (e.key === 'beerGameGroup' && e.newValue) {
-      try {
-        var data = JSON.parse(e.newValue);
-        if (data && data.length > 0) {
-          generateReport();
-        }
-      } catch(err) {}
+    if (e.key === 'beerGameGroup' || e.key === null) {
+      generateReport();
     }
   });
 </script>

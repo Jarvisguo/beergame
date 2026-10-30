@@ -61,7 +61,7 @@ test('report tables treat player names as text', () => {
   const script = [...html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)]
     .find(match => match[1].includes('function generateReport()'))[1];
   const p = page(script);
-  p.storage.set('beerGameGroup', JSON.stringify([group]));
+  p.storage.set('beerGameGroup', JSON.stringify([{ ...group, week: 27 }]));
   runInContext('generateReport()', p.context);
   assertSafe(p.get('#groupsContainer').innerHTML);
 });
