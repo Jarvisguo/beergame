@@ -265,9 +265,10 @@ table { border-collapse: collapse; width: 100%; }
 
 /* ── Admin PC Layout ────────────────────────────────────────────────── */
 .admin-container {
-  max-width: 1800px;
+  width: 100%;
+  max-width: 1920px;
   margin: 0 auto;
-  padding: 20px 32px;
+  padding: 20px 24px;
 }
 
 .admin-header {
@@ -317,7 +318,7 @@ table { border-collapse: collapse; width: 100%; }
 
 .admin-layout {
   display: grid;
-  grid-template-columns: minmax(700px, 3fr) minmax(380px, 2fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-md);
   align-items: start;
 }
@@ -345,11 +346,35 @@ table { border-collapse: collapse; width: 100%; }
   font-variant-numeric: tabular-nums;
 }
 
-@media (max-width: 1100px) {
-  .admin-layout {
-    grid-template-columns: 1fr;
-  }
-  .admin-right #charts {
-    position: static;
-  }
+/* Keep the monitoring columns visible on ordinary PCs. Narrow screens scroll
+   inside the panel; long names and role summaries must not widen the page. */
+#adminTable {
+  table-layout: fixed;
+  min-width: 1180px;
+}
+#adminTable th,
+#adminTable td {
+  padding: 10px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  vertical-align: top;
+}
+#adminTable th:first-child { width: 12%; }
+#adminTable th:nth-child(n+2):nth-child(-n+5) { width: 10%; }
+#adminTable th:nth-child(6),
+#adminTable th:nth-child(7) { width: 5%; }
+#adminTable th:nth-child(8) { width: 7%; }
+#adminTable th:nth-child(9) { width: 17%; text-align: left; }
+#adminTable th:nth-child(10) { width: 9%; }
+#adminTable th:last-child { width: 5%; }
+#adminTable td:nth-child(n+6):nth-child(-n+8) {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+#adminTable .btn,
+#adminTable .tag { white-space: nowrap; }
+
+@media (max-width: 767px) {
+  .admin-container { padding: 16px 12px; }
 }
