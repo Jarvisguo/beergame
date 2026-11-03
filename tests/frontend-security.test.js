@@ -34,6 +34,7 @@ function page(script) {
     setTimeout() {}, clearTimeout() {}, console,
   });
   runInContext(readFileSync('public/bullwhip.js', 'utf8'), context);
+  runInContext(readFileSync('public/performance.js', 'utf8'), context);
   runInContext(script, context);
   return { context, get, rows, events, storage };
 }

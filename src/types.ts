@@ -53,6 +53,9 @@ export interface DemandProfile {
 }
 
 export interface Group {
+  /** Assignment provenance, absent in legacy state. Never discarded on seat replacement. */
+  roleAssignmentsComplete?: boolean;
+  roleAssignments?: Array<Array<{ name: string; kind: 'human' | 'ai'; week: number }>>;
   week: number;
   cost: number;
   users: GameUser[];

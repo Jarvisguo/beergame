@@ -15,6 +15,7 @@ function page(file) {
     localStorage: { getItem() { return null; }, setItem() {} }, performance: { now: () => 0 },
     requestAnimationFrame() {}, setTimeout() {}, clearTimeout() {}, console });
   runInContext(readFileSync('public/bullwhip.js', 'utf8'), ctx);
+  runInContext(readFileSync('public/performance.js', 'utf8'), ctx);
   let script = readFileSync(file, 'utf8');
   if (file.endsWith('.html')) script = [...script.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)].find(m => m[1].includes('function generateReport()'))[1];
   runInContext(script, ctx);

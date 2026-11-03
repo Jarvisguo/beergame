@@ -1,3 +1,4 @@
+import { recordAssignment } from './participation.js';
 import type { GameUser, UserLookup, Group } from '../types.js';
 import {
   BEER_NAMES,
@@ -69,6 +70,7 @@ export function registerUser(
 
     for (let ri = 0; ri < grp.users.length; ri++) {
       const slot = grp.users[ri];
+      if (!slot) return placeUser(socketId, userName, gi, ri, false);
       if (slot && !slot.socketId) {
         return placeUser(socketId, userName, gi, ri, !slot.removed);
       }
@@ -159,6 +161,8 @@ function placeUser(
 ): { user: UserLookup; isReconnect: boolean } {
   const g = state.groups[groupIndex];
 
+  recordAssignment(g, slotIndex, userName, 'human');
+
   if (isTakeover) {
     // Overwrite the disconnected player's identity, keep game state intact
     g.users[slotIndex].name = userName;
@@ -215,6 +219,8 @@ function makeEmptyGroup(): Group {
     week: 0,
     cost: 0,
     users: [],
+    roleAssignments: [],
+    roleAssignmentsComplete: true,
     waitingForOrders: [],
     demandTrend: trend,
     demandProfile: profile,

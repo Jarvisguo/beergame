@@ -133,6 +133,7 @@
   </div>
 </div>
 
+<section class="summary-box" id="roleRankings"></section>
 <div id="groupsContainer"></div>
 
 <div class="key-insight" id="keyInsight">
@@ -157,6 +158,7 @@
 </div>
 
 <script src="bullwhip.js"></script>
+<script src="performance.js"></script>
 <script>
   // Generate report from current game state
   var maxWeeks = 26;
@@ -229,6 +231,29 @@
     return weekly;
   }
 
+  function performanceNumber(value) { return Number.isFinite(value) ? String(value) : '—'; }
+  function participationText(member) {
+    return escapeHtml(member.status) + (member.history.length ? '<div class="bw-detail">' + member.history.map(function(h) {
+      return '第 ' + escapeHtml(h.week) + ' 周：' + escapeHtml(h.name) + (h.kind === 'ai' ? '（AI）' : '（人工）');
+    }).join(' → ') + '</div>' : '');
+  }
+  function renderRoleRankings(groups) {
+    var boards = BeerPerformance.boards(groups);
+    var html = '<h3>同角色绩效排名 · 累计成本</h3><p class="bw-method">仅完整人工参与且数据齐全的成员入榜；相同角色、相同需求设置内按原始累计成本升序，成本相同并列（1、1、3）。接替、AI 补位及历史未知者仅在小组对照中展示。结果仍受队友影响，不代表个人能力的独立测量。</p>';
+    boards.forEach(function(board, index) {
+      var trend = {mixed:'混合趋势',growth:'增长趋势',decline:'下降趋势'}[board.trend] || board.trend;
+      html += '<h4>' + escapeHtml(board.role) + ' · ' + escapeHtml(trend) + ' · 对照集 ' + (index + 1) + '（' + board.rows.length + ' 人）</h4>';
+      html += '<div class="bw-table-wrap"><table class="role-table"><thead><tr><th>名次</th><th>小组</th><th>成员</th><th>累计成本</th><th>累计积压（箱·周）</th><th>积压周数</th><th>本环节放大倍数</th></tr></thead><tbody>';
+      board.rows.forEach(function(r) {
+        html += '<tr><td>' + r.rank + '</td><td>#' + r.groupNumber + '</td><td>' + escapeHtml(r.user.name) + '</td><td>¥' + performanceNumber(r.cost) + '</td><td>' + performanceNumber(r.backlogSum) + '</td><td>' + performanceNumber(r.backlogWeeks) + '</td><td>' + BeerMetrics.badge(BeerMetrics.forUser(r.user,26)) + '</td></tr>';
+      });
+      html += '</tbody></table></div>';
+    });
+    if (!boards.length) html += '<p>暂无符合个人排名条件的成员；参与情况见下方小组对照。</p>';
+    document.getElementById('roleRankings').innerHTML = html;
+    document.getElementById('roleRankings').hidden = groups.length === 0;
+  }
+
   function generateReport() {
     // Try to get gameGroup from localStorage (set by admin.js)
     var gameGroupData = null;
@@ -247,6 +272,7 @@
     }).filter(function(group) {
       return Number.isInteger(group.week) && group.week > maxWeeks;
     });
+    renderRoleRankings(gameGroup);
     document.getElementById('reportDate').textContent = '生成时间：' + new Date().toLocaleString('zh-CN');
     document.getElementById('keyInsight').hidden = gameGroup.length === 0;
 
@@ -332,6 +358,7 @@
         bullwhipData.push({
           name: user.name || '玩家',
           role: user.role && user.role.name ? user.role.name : '未知角色',
+          performance: BeerPerformance.member(group, u),
           finalCost: user.cost || 0,
           finalInventory: user.inventory || 0,
           finalBacklog: user.backlog || 0,
@@ -415,8 +442,9 @@
             '<div class="metric-item"><div class="metric-label">积压总计</div><div class="metric-value">' + Math.round(totalBacklog) + '</div></div>' +
             '<div class="metric-item"><div class="metric-label">本组最大方差放大倍数</div><div class="metric-value">' + bullwhipLabel + '</div></div>' +
           '</div>' +
+          '<h4>同组成员经营对照</h4><p class="bw-method">不同角色不作个人优劣排名；累计积压为各周结算后积压之和，同一欠单跨周会重复计入。接替记录表示分配时点，成本与历史可能包含前任或 AI 的经营结果。</p>' +
           '<div class="bw-table-wrap"><table class="role-table">' +
-            '<thead><tr><th>角色</th><th>玩家</th><th>成本</th><th>库存</th><th>积压</th><th>均值</th><th>订货标准差 / CV</th><th>本环节放大倍数</th><th>相对客户需求</th></tr></thead>' +
+            '<thead><tr><th>角色</th><th>玩家</th><th>参与情况 / 排名资格</th><th>累计成本</th><th>累计积压（箱·周）</th><th>积压周数</th><th>期末库存</th><th>期末积压</th><th>均值</th><th>订货标准差 / CV</th><th>本环节放大倍数</th><th>相对客户需求</th></tr></thead>' +
             '<tbody>';
 
       for (var u = 0; u < bullwhipData.length; u++) {
@@ -424,7 +452,10 @@
         html += '<tr>' +
           '<td>' + escapeHtml(rd.role) + '</td>' +
           '<td>' + escapeHtml(rd.name) + '</td>' +
-          '<td>¥' + Math.round(rd.finalCost) + '</td>' +
+          '<td>' + participationText(rd.performance) + '</td>' +
+          '<td>¥' + performanceNumber(rd.performance.cost) + '</td>' +
+          '<td>' + performanceNumber(rd.performance.backlogSum) + '</td>' +
+          '<td>' + performanceNumber(rd.performance.backlogWeeks) + '</td>' +
           '<td>' + Math.round(rd.finalInventory) + '</td>' +
           '<td>' + Math.round(rd.finalBacklog) + '</td>' +
           '<td>' + (rd.mean === null ? '—' : rd.mean.toFixed(1)) + '</td>' +

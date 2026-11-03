@@ -14,6 +14,7 @@ function report(groups) {
     window: { addEventListener: (e, h) => events.set(e, h) },
     localStorage: { getItem: () => stored }, setTimeout() {}, console });
   runInContext(readFileSync('public/bullwhip.js', 'utf8'), context);
+  runInContext(readFileSync('public/performance.js', 'utf8'), context);
   runInContext(script, context);
   const render = () => runInContext('generateReport()', context);
   render();
@@ -87,6 +88,7 @@ test('ending the game keeps server group numbers through the admin cache and fin
     localStorage: { setItem: (k, v) => storage.set(k, v) }, io: () => ({ on() {}, emit() {} }),
     setTimeout() {}, clearTimeout() {}, console, groups });
   runInContext(readFileSync('public/bullwhip.js', 'utf8'), admin);
+  runInContext(readFileSync('public/performance.js', 'utf8'), admin);
   runInContext(readFileSync('public/admin.js', 'utf8'), admin);
   runInContext('gameGroup = groups; rankGroups()', admin);
   const cached = JSON.parse(storage.get('beerGameGroup'));
@@ -150,4 +152,26 @@ test('weekly costs account for the last settlement without adding a fictitious z
   const costs = [...p.text().matchAll(/class="weekly-cell-cost">成本 ¥(\d+)/g)].map(m => Number(m[1]));
   assert.deepEqual(costs, Array(26).fill(2));
   assert.equal(costs.reduce((sum, value) => sum + value, 0), 52);
+});
+
+test('personal rankings render exact costs, provenance and escaped identities, then clear on reset', () => {
+  const a=group(27,13.5,'<img src=x>');
+  const b=group(27,14,'接替成员');
+  for(const g of [a,b]) {
+    g.demandTrend='mixed';g.demandProfile={schedule:[{until:26,demand:4}]};
+    g.users[0].inventoryHistory=Array(26).fill(0);g.users[0].backlogHistory=Array(26).fill(0);
+    g.users[0].costHistory=Array(26).fill(0);
+    g.roleAssignments=[[{name:g.users[0].name,kind:'human',week:1}]];
+  }
+  b.roleAssignments[0].unshift({name:'前任',kind:'human',week:1});
+  b.roleAssignments[0].push({name:'AI',kind:'ai',week:9});
+  const p=report([a,b]);
+  assert.match(p.get('roleRankings').innerHTML,/13.5/);
+  assert.doesNotMatch(p.get('roleRankings').innerHTML,/<img|接替成员/);
+  assert.match(p.get('roleRankings').innerHTML,/&lt;img src=x&gt;/);
+  assert.match(p.get('groupsContainer').innerHTML,/接替／多人参与/);
+  assert.match(p.get('groupsContainer').innerHTML,/含 AI 补位记录/);
+  assert.match(p.get('groupsContainer').innerHTML,/同组成员经营对照/);
+  p.update([]);assert.equal(p.get('roleRankings').hidden,true);
+  assert.doesNotMatch(p.get('roleRankings').innerHTML,/13.5|&lt;img/);
 });

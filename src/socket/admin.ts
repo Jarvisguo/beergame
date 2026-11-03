@@ -1,3 +1,4 @@
+import { recordAssignment } from '../state/participation.js';
 import type { Server, Socket } from 'socket.io';
 import { state } from '../state/store.js';
 import {
@@ -233,6 +234,7 @@ export function registerAdminHandlers(io: Server, socket: Socket): void {
     delete user.socketId;
     delete user.disconnectedAt;
     delete user.disconnectTimer;
+    if (user.agent) recordAssignment(g, roleIndex, user.name, 'ai');
     delete user.agent;
     user.removed = true;
     user.removedAt = Date.now();
@@ -270,6 +272,8 @@ export function registerAdminHandlers(io: Server, socket: Socket): void {
         week: 0,
         cost: 0,
         users: [],
+        roleAssignments: [],
+        roleAssignmentsComplete: true,
         waitingForOrders: [],
         demandTrend: trend,
         demandProfile: profile,
@@ -291,6 +295,7 @@ export function registerAdminHandlers(io: Server, socket: Socket): void {
       params: params || {},
     };
 
+    recordAssignment(g, roleIndex, existing && !existing.removed ? existing.name : `AI-${['零售商','批发商','区域仓库','工厂'][roleIndex]}-G${groupIndex + 1}`, 'ai');
     if (existing && !existing.removed) {
       existing.agent = agentConfig;
     } else {
@@ -332,6 +337,7 @@ export function registerAdminHandlers(io: Server, socket: Socket): void {
     const user = g.users[roleIndex];
     if (!user || !user.agent) return ack(callback, { err: '该角色没有 AI 代理。' });
 
+    if (user.agent) recordAssignment(g, roleIndex, user.name, 'ai');
     delete user.agent;
 
     if (!user.socketId) {
