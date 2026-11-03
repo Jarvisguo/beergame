@@ -378,3 +378,32 @@ table { border-collapse: collapse; width: 100%; }
 @media (max-width: 767px) {
   .admin-container { padding: 16px 12px; }
 }
+
+/* Player visibility must win over flex/grid component display rules. */
+.player-page [hidden] { display: none !important; }
+
+/* Keep the information needed for an order together, directly above its input. */
+.decision-caption, .decision-shipped { display: block; font-size: 12px; color: var(--clr-muted); }
+.decision-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 8px 0; }
+.decision-grid > div { padding: 8px 12px; border-radius: var(--radius-sm); background: #f0f4f8; }
+.decision-grid span { display: block; font-size: 13px; color: var(--clr-muted); }
+.decision-grid b { display: block; font-size: 24px; line-height: 1.25; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.order-label { display: block; margin: 12px 0 8px; font-size: 14px; font-weight: 600; }
+.player-page .order-form .input { min-width: 0; width: 0; }
+.player-page .order-form .btn { flex-shrink: 0; }
+@media (max-width: 767px) {
+  .flow-state[data-state="waiting-turn"] > .flow-icon { display: none; }
+}
+
+/* Keep every member column visible, including long names and offline labels. */
+#groupTable { table-layout: fixed; }
+#groupTable th, #groupTable td {
+  padding: 8px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  vertical-align: top;
+}
+#groupTable th:first-child { width: 10%; }
+#groupTable th:nth-child(2) { width: 34%; }
+#groupTable th:nth-child(3) { width: 22%; }
+#groupTable th:last-child { width: 34%; }

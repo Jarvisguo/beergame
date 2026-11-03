@@ -25,6 +25,7 @@ function page(createSocket) {
     localStorage: { getItem: k => storage.get(k) || null, setItem: (k, v) => storage.set(k, v), removeItem: k => storage.delete(k) },
     setTimeout(fn, delay) { const id = ++timerID; timers.set(id, { at: clock + delay, fn }); return id; },
     clearTimeout: id => timers.delete(id),
+    performance: { now: () => 0 }, requestAnimationFrame() {}, cancelAnimationFrame() {},
   });
   runInContext(readFileSync('public/bullwhip.js', 'utf8'), context);
   runInContext(readFileSync('public/game.js', 'utf8'), context);
@@ -32,7 +33,7 @@ function page(createSocket) {
     group: { week: 3, waitingForOrders: ['零售商', '区域仓库', '工厂'], users: [
       { name: 'teammate', role: { name: '零售商' }, orderHistory: [] },
       { name: 'returning-player', socketId: socket.id, inventory: 9, backlog: 0, cost: 7,
-        orderHistory: [4, 5], costHistory: [2, 7], role: { name: '批发商', upstream: { name: '区域仓库', shipments: 4 },
+        orderHistory: [4, 5], costHistory: [2, 7], role: { name: '批发商', upstream: { name: '区域仓库', orders: 8, shipments: 4 },
           downstream: { name: '零售商', orders: 5, shipments: 5 } } },
     ] } });
   const get = id => elements.get('#' + id);
@@ -89,6 +90,83 @@ test('reset cancels pending replies and retries, including the cached username',
   p.events.get('game reset')(); stale.callback(p.response()); p.tick(600000);
   assert.equal(p.get('mainApp').hidden, true); assert.equal(p.get('loginModal').hidden, false);
   assert.equal(p.storage.has('bdg_username'), false);
+});
+
+function startOrdering(p) {
+  p.get('usernameInput').value = 'returning-player'; p.click('btnLogin');
+  const msg = p.response(); msg.group.waitingForOrders.push('批发商');
+  p.requests.at(-1).callback(msg);
+}
+function restoreOrdering(p, changes = {}) {
+  p.visible();
+  const msg = p.response(); msg.reconnected = true; msg.group.waitingForOrders.push('批发商');
+  Object.assign(msg, changes);
+  p.requests.at(-1).callback(msg);
+}
+
+test('same-week draft survives visibility recovery and a socket reconnect without being submitted', () => {
+  const p = page(); startOrdering(p); p.get('orderInput').value = '18';
+  restoreOrdering(p);
+  assert.equal(p.get('orderInput').value, '18');
+  p.disconnect(); p.connect();
+  const msg = p.response(); msg.reconnected = true; msg.group.waitingForOrders.push('批发商');
+  p.requests.at(-1).callback(msg);
+  assert.equal(p.get('orderInput').value, '18');
+  assert.equal(p.requests.filter(r => r.event === 'submit order').length, 0);
+});
+
+test('draft is discarded after a new week, a new seat, reset or removal', () => {
+  for (const transition of ['week', 'seat', 'game reset', 'kicked out']) {
+    const p = page(); startOrdering(p); p.get('orderInput').value = '18';
+    if (transition === 'week') {
+      const group = p.response().group; group.week = 4; group.waitingForOrders.push('批发商');
+      restoreOrdering(p, { group });
+    } else if (transition === 'seat') restoreOrdering(p, { reconnected: false });
+    else p.events.get(transition)();
+    assert.equal(p.get('orderInput').value, '', transition);
+  }
+});
+
+test('decision card shows demand, stock, backlog and deliveries from the current snapshot', () => {
+  const p = page(); startOrdering(p);
+  assert.equal(p.get('resultDemand').textContent, '5');
+  assert.equal(p.get('resultInventory').textContent, '9');
+  assert.equal(p.get('resultBacklog').textContent, '0');
+  assert.equal(p.get('resultDelivery').textContent, '4');
+});
+
+test('confirmed quantity includes zero, survives wait updates and is restored from the server', () => {
+  for (const quantity of [0, 18]) {
+    const p = page(); startOrdering(p); p.get('orderInput').value = String(quantity); p.click('btnOrder');
+    p.requests.at(-1).callback(['零售商']);
+    assert.equal(p.get('submittedOrderText').textContent, `第 3 周已提交：${quantity} 箱`);
+    assert.equal(p.get('orderInput').value, '');
+    p.events.get('update order wait')(['工厂']);
+    assert.equal(p.get('submittedOrderText').textContent, `第 3 周已提交：${quantity} 箱`);
+    p.disconnect(); p.connect();
+    const msg = p.response(); msg.reconnected = true; msg.group.users[1].role.upstream.orders = quantity;
+    p.requests.at(-1).callback(msg);
+    assert.equal(p.get('submittedOrderText').textContent, `第 3 周已提交：${quantity} 箱`);
+  }
+});
+
+test('failed order retains the draft; an old acknowledgement cannot replace the next week', () => {
+  const p = page(); startOrdering(p); p.get('orderInput').value = '18'; p.click('btnOrder');
+  p.requests.at(-1).callback({ err: '请重试' });
+  assert.equal(p.get('orderInput').value, '18'); assert.equal(p.get('btnOrder').disabled, false);
+  p.click('btnOrder'); const old = p.requests.at(-1);
+  const msg = p.response();
+  msg.group.users[1].backlog = 11; msg.group.users[1].role.downstream.orders = 20;
+  msg.group.users[1].inventory = 3; msg.group.users[1].role.upstream.shipments = 7;
+  p.events.get('next turn')({ week: 4, numUsers: 8, waitingForOrders: ['批发商'], update: msg.group.users[1] });
+  assert.equal(p.get('resultBacklog').textContent, '11');
+  assert.equal(p.get('resultDemand').textContent, '20');
+  assert.equal(p.get('resultInventory').textContent, '3');
+  assert.equal(p.get('resultDelivery').textContent, '7');
+  assert.equal(p.get('orderInput').value, '');
+  p.get('orderInput').value = '9'; old.callback(['工厂']);
+  assert.equal(p.get('flowCard').dataset.flowState, 'waiting-turn');
+  assert.equal(p.get('orderInput').value, '9');
 });
 
 test('the default reservation is ten minutes and remains configurable', () => {
@@ -159,6 +237,7 @@ test('real frontend/server restore group, seat and orders within grace; expiry s
       await waitFor(() => livePage.get('connBar').textContent === '🟢 在线');
       assert.equal(livePage.get('userGroup').textContent, '第 2 组');
       assert.equal(livePage.get('flowCard').dataset.flowState, 'waiting-others');
+      assert.equal(livePage.get('submittedOrderText').textContent, '第 2 周已提交：8 箱');
       assert.match((await emit(livePage.socket, 'submit order', '9')).err, /已提交/);
     }
     livePage.socket.disconnect();

@@ -26,6 +26,7 @@ let curGroup = null;
 let gameEnded = false;
 let myRoleName = '';
 let submittedOrder = false;
+let orderDraftKey = null;
 let activeUsername = localStorage.getItem('bdg_username') || '';
 let loginRequest = null;
 let loginRetryTimer = null;
@@ -212,27 +213,42 @@ function updateAnalytics() {
   }
 }
 
+// Drafts live only in this page. A new seat, reset, or completed order invalidates them.
+function clearOrderDraft() {
+  orderDraftKey = null;
+  $('#orderInput').value = '';
+}
+
 // ── Flow state machine ────────────────────────────────────────────────
 function setFlowState(state, data = {}) {
   const card = $('#flowCard');
   if (!card) return;
   card.dataset.flowState = state;
+  if (state !== 'waiting-turn') clearOrderDraft();
 
   if (state === 'lobby') {
     if (data.text) $('#lobbySubText').textContent = data.text;
   } else if (state === 'waiting-turn') {
     const week = data.week || curWeek;
-    const resultWeek = Math.max(0, week - 1);
-    $('#turnTitle').textContent = `第 ${resultWeek} 周结果`;
-    if (data.delivery != null) $('#resultDelivery').textContent = `+${data.delivery} 箱（来自 ${data.upstreamName || '上游'}）`;
-    if (data.shipped != null)   $('#resultShipped').textContent  = `${data.shipped} 箱 → ${data.downstreamName || '下游'}`;
-    if (data.inventory != null) $('#resultInventory').textContent = `${data.inventory} 箱`;
-    if (data.upstreamName)      $('#orderText').innerHTML = `现在向 <strong>${data.upstreamName}</strong> 订货：`;
-    $('#orderInput').value = '';
-    $('#orderInput').disabled = false;
-    $('#btnOrder').disabled = false;
-    setTimeout(() => $('#orderInput').focus(), 100);
+    const user = data.user || curUser;
+    const key = JSON.stringify([user && user.name, userIdx, week]);
+    if (orderDraftKey !== key) clearOrderDraft();
+    orderDraftKey = key;
+    $('#turnTitle').textContent = `第 ${week} 周订货`;
+    $('#resultDemand').textContent = String(user.role.downstream.orders ?? 0);
+    $('#resultInventory').textContent = String(user.inventory ?? 0);
+    $('#resultBacklog').textContent = String(user.backlog ?? 0);
+    $('#resultDelivery').textContent = String(user.role.upstream.shipments ?? 0);
+    $('#resultShipped').textContent = String(user.role.downstream.shipments ?? 0);
+    $('#orderText').textContent = `向${user.role.upstream.name}订货（箱）`;
+    $('#orderInput').disabled = !sessionReady || !socket.connected;
+    $('#btnOrder').disabled = !sessionReady || !socket.connected;
   } else if (state === 'waiting-others') {
+    const week = data.week ?? curWeek;
+    const amount = data.amount ?? (curUser && curUser.role.upstream.orders);
+    $('#submittedOrderText').textContent = Number.isInteger(amount) && amount >= 0
+      ? `第 ${week} 周已提交：${amount} 箱`
+      : `第 ${week} 周订单已提交`;
     const roles = data.waiting && data.waiting.length ? data.waiting.join('、') : '';
     $('#waitingOthersText').innerHTML = roles
       ? `已提交订单。还未提交：<strong>${roles}</strong>`
@@ -313,6 +329,7 @@ function resetUI() {
 }
 
 function applyLoginState(msg, options = {}) {
+  if (!msg.reconnected) clearOrderDraft();
   sessionReady = true;
   setConn('online');
   $('#btnReconnect').hidden = true;
@@ -352,18 +369,13 @@ function applyLoginState(msg, options = {}) {
       setFlowState('waiting-others', { waiting: curGroup.waitingForOrders });
     } else {
       submittedOrder = false;
-      setFlowState('waiting-turn', {
-        week: curWeek,
-        delivery: curUser.role.upstream.shipments,
-        shipped: curUser.role.downstream.shipments,
-        inventory: curUser.inventory,
-        upstreamName: curUser.role.upstream.name,
-        downstreamName: curUser.role.downstream.name,
-      });
+      setFlowState('waiting-turn', { week: curWeek });
     }
     $('#board').hidden = false;
     $('#lobby').hidden = true;
   } else if (gameEnded) {
+    $('#board').hidden = true;
+    $('#lobby').hidden = false;
     setFlowState('ended');
     updateStatus();
     updateGroupTable();
@@ -372,6 +384,8 @@ function applyLoginState(msg, options = {}) {
     $('#btnOrder').disabled = true;
     $('#orderInput').disabled = true;
     $('#board').hidden = true;
+    $('#analytics').hidden = true;
+    $('#weekInfo').hidden = true;
     $('#lobby').hidden = false;
     updateStatus();
     updateGroupTable();
@@ -486,11 +500,7 @@ socket.on('game started', (msg) => {
   if (submittedOrder) {
     setFlowState('waiting-others', { waiting: curGroup.waitingForOrders });
   } else {
-    setFlowState('waiting-turn', {
-      week: msg.week,
-      upstreamName: curUser ? curUser.role.upstream.name : '',
-      downstreamName: curUser ? curUser.role.downstream.name : '',
-    });
+    setFlowState('waiting-turn', { week: msg.week });
   }
 });
 
@@ -511,7 +521,7 @@ socket.on('next turn', (msg) => {
     submittedOrder = true;
     setFlowState('completed');
   } else if (submittedOrder) {
-    setFlowState('waiting-others', { waiting: msg.waitingForOrders });
+    setFlowState('waiting-others', { waiting: msg.waitingForOrders, week: msg.week, amount: msg.update.role.upstream.orders });
   }
 
   // Trigger turn flow animations
@@ -531,14 +541,7 @@ socket.on('next turn', (msg) => {
     updateUpstreamShipmentDelta(newUser);
 
     if (msg.week <= MAX_WEEKS && !submittedOrder) {
-      setFlowState('waiting-turn', {
-        week: msg.week,
-        delivery: upstreamDelivery,
-        shipped: newUser.role.downstream.shipments,
-        inventory: newUser.inventory,
-        upstreamName: curUser.role.upstream.name,
-        downstreamName: curUser.role.downstream.name,
-      });
+      setFlowState('waiting-turn', { week: msg.week, user: newUser });
     }
   }
 
@@ -626,10 +629,11 @@ $('#btnOrder').addEventListener('click', (e) => {
   }
   $('#btnOrder').disabled = true;
   $('#orderInput').disabled = true;
+  const orderWeek = curWeek;
   const orderSocketId = socket.id;
   const orderSessionVersion = sessionVersion;
   socket.emit('submit order', val, (resp) => {
-    if (!sessionReady || socket.id !== orderSocketId || sessionVersion !== orderSessionVersion) return;
+    if (!sessionReady || socket.id !== orderSocketId || sessionVersion !== orderSessionVersion || curWeek !== orderWeek) return;
     if (resp && resp.err) {
       showToast(resp.err, 3000);
       if (!submittedOrder) {
@@ -639,6 +643,7 @@ $('#btnOrder').addEventListener('click', (e) => {
       return;
     }
     submittedOrder = true;
+    curUser.role.upstream.orders = amount;
     if (curGroup && resp) {
       curGroup.waitingForOrders = resp;
     }

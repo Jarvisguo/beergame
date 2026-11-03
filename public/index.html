@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="bullwhip.css">
 </head>
-<body>
+<body class="player-page">
 
 <div class="conn-bar conn-online" id="connBar">🟢 在线</div>
 
@@ -69,22 +69,16 @@
       <div class="flow-state" data-state="waiting-turn">
         <div class="flow-icon">📋</div>
         <div class="flow-body">
-          <strong id="turnTitle">第 N 周结果</strong>
-          <div class="flow-result-rows">
-            <div class="flow-result-row">
-              <span class="flow-result-label">📦 收到货物</span>
-              <span class="flow-result-val" id="resultDelivery">—</span>
-            </div>
-            <div class="flow-result-row">
-              <span class="flow-result-label">🚚 向下游发货</span>
-              <span class="flow-result-val" id="resultShipped">—</span>
-            </div>
-            <div class="flow-result-row">
-              <span class="flow-result-label">📊 当前库存</span>
-              <span class="flow-result-val" id="resultInventory">—</span>
-            </div>
+          <strong id="turnTitle">本周订货</strong>
+          <span class="decision-caption">当前可见数据 · 单位：箱</span>
+          <div class="decision-grid">
+            <div><span>收到需求</span><b id="resultDemand">—</b></div>
+            <div><span>当前库存</span><b id="resultInventory">—</b></div>
+            <div><span>当前积压</span><b id="resultBacklog">—</b></div>
+            <div><span>收到货物</span><b id="resultDelivery">—</b></div>
           </div>
-          <strong id="orderText">现在向上游订货：</strong>
+          <div class="decision-shipped">已向下游发货：<span id="resultShipped">—</span> 箱</div>
+          <label class="order-label" id="orderText" for="orderInput">向上游订货（箱）</label>
           <div class="order-form">
             <input type="number" id="orderInput" class="input input-sm" placeholder="数量" min="0" max="100" inputmode="numeric" pattern="[0-9]*" enterkeyhint="done">
             <button class="btn btn-sm btn-primary" id="btnOrder">提交订单</button>
@@ -96,7 +90,7 @@
       <div class="flow-state" data-state="waiting-others">
         <div class="flow-icon">⏳</div>
         <div class="flow-body">
-          <strong>等待其他玩家</strong>
+          <strong id="submittedOrderText" role="status" aria-live="polite">本周订单已提交</strong>
           <span class="flow-sub" id="waitingOthersText">已提交订单，等待其他人...</span>
         </div>
       </div>
